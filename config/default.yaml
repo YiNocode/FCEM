@@ -1,0 +1,168 @@
+# FCEM default parameters (TRO paper experiments)
+dt: 0.10
+max_steps: 1200
+n_trials: 50
+seed: 42
+
+world:
+  xmin: 0.0
+  xmax: 40.0
+  ymin: 0.0
+  ymax: 40.0
+
+# Pursuer / evader dynamics (v_ref ratio 0.7; experiments override via dynamics_file)
+pursuer_vmax: 5.0
+pursuer_amax: 4.0
+pursuer_kp: 2.0
+pursuer_kd: 1.0
+pursuer_collision_radius: 0.25
+
+evader_vmax: 3.5
+evader_amax: 1.8
+# Evader policy: "game" (minimax differential-game) | "apf" (legacy repulsion)
+evader_policy: apf
+evader_game:
+  horizon: 0.85
+  n_directions: 48
+  minimax_weight: 1.0
+  gap_gain: 1.15
+  velocity_inertia: 0.35
+evader_centroid_gain: 0.85
+evader_nearest_gain: 1.10
+evader_nearest_range: 14.0
+evader_obs_gain: 0.60
+evader_boundary_barrier_range: 8.0
+evader_boundary_tight_margin: 2.5
+evader_boundary_slide_gain: 0.85
+evader_boundary_brake_gain: 2.40
+evader_boundary_vmin_frac: 0.30
+
+obstacle_influence: 2.20
+pursuer_obs_gain: 1.25
+boundary_margin: 5.0
+boundary_gain: 2.20
+
+# MIGHTY-inspired Hermite local planner (2D / PyFlyt / PX4 bridge)
+local_planner:
+  clearance: 0.55
+  horizon_time: 0.65
+  n_path_samples: 20
+
+G_max_allowed_deg: 140.0
+G_max_gate_deg: 165.0
+
+# Last K steps before capture for structural metric aggregation (paper stats)
+pre_capture_window: 20
+
+fcem:
+  R_init: 12.0
+  R_terminal: 1.2
+  capture_radius: 1.8
+  contraction_rate: 0.12
+  expansion_rate: 0.003
+  min_R_for_closure: 4.40
+  D_min: 0.18
+  C_min: 0.08
+  slot_error_frac: 0.95
+  slot_error_abs: 1.50
+  gate_slot_floor: 0.12
+  hold_R_on_stall: true
+  lookahead_time: 0.80
+  center_shift_frac: 0.28
+  slot_v_ff_gain: 0.85
+  assignment_inertia: 0.12
+  infeasible_penalty: 8.0
+  exec_horizon_steps: 3
+  recovery_lookahead_time: 1.08
+  recovery_assignment_inertia: 0.03
+  tau_T: 2.5
+  T_min: 0.35
+  v_min_frac: 0.15
+  assignment_score_scale: 0.15
+  assignment_weights:
+    w_reach: 1.0
+    w_ang: 0.30
+    w_sync: 0.50
+    w_switch: 1.0
+    w_safe: 0.40
+  trap:
+    boundary_trap_threshold: 5.0
+    corner_trap_threshold: 6.0
+    corner_clamp_margin: 0.6
+    stall_q_threshold: 0.02
+    stall_steps: 25
+    recovery_radius_scale: 0.95
+
+output_dir: results
+
+# PyFlyt 2.5D — velocity commands (mode 6: vx, vy, yaw-rate, vz), not position setpoints
+pyflyt:
+  altitude: 1.5
+  physics_hz: 240
+  render: true
+  flight_mode: 6
+  n_pursuers: 3
+  # 固定俯视全景（40x40 m）
+  camera_follow: false
+  camera_distance: 58.0
+  camera_yaw: 0.0
+  camera_pitch: -89.0
+  show_markers: true
+  marker_radius: 0.65
+  drone_model: primitive_drone
+  bounds_margin: 0.15
+  yaw_rate_gain: 2.0
+  max_yaw_rate: 1.2
+  altitude_rate_gain: 1.5
+  max_vz: 0.8
+  # FCEM/fixed_ring: 规划层用运动学状态（与 sim2d 一致），物理层发速度指令
+  use_plan_state: true
+  verbose: false
+  log_every: 20
+
+ablation:
+  ablate_no_esc_dir: false
+  ablate_no_center_shift: false
+  ablate_single_manifold: false
+  ablate_no_executability: false
+  # Layer validation: guarded gate hurts TTC (~76s vs ~12s w/o L4); use fixed-rate shrink.
+  ablate_no_guarded_contraction: true
+  ablate_no_slot_vel_ff: false
+  ablate_nearest_assign: false
+  ablate_no_sync_assign: false
+  ablate_no_sync_gate: false
+
+# Literature baseline hyperparameters (point-mass adaptations)
+baselines:
+  deghat_circumnavigation:
+    omega_des: 0.35
+    k_radial: 1.2
+  kou_xiang_fencing:
+    fence_gain: 2.0
+    tangential_gain: 0.6
+  fang_relay_2022:
+    switch_hysteresis: 0.5
+    min_hold_steps: 8
+    lookahead_time: 0.6
+  relay_pursuit:
+    switch_dist_margin: 1.0
+    min_hold_steps: 10
+    hold_gain: 0.15
+  liao_mpc:
+    horizon: 6
+    w_pos: 1.0
+    w_u: 0.05
+    w_obs: 8.0
+  yu_consensus:
+    consensus_gain: 1.0
+    adjacency: complete
+  open_marl:
+    n_pursuers: 3
+    history_step: 10
+    future_prediction_step: 5
+    obs_max_obstacles: 3
+    mask_value: -5.0
+    arena_scale: 40.0
+    checkpoint_path: checkpoints/open_marl/default.pt
+    device: cpu
+    deterministic: true

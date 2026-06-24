@@ -1,0 +1,6 @@
+_base: comparison.yaml
+name: literature_comparison
+section: comparative_evaluation
+description: Alias of comparison.yaml (same methods); separate output dir for legacy runs
+
+output_subdir: comparison_literature

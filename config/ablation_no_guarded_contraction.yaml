@@ -1,0 +1,5 @@
+# Alias: guarded contraction off (same as default.yaml since layer-validation ablation)
+_base: default.yaml
+
+ablation:
+  ablate_no_guarded_contraction: true

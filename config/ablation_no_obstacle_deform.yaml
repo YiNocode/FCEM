@@ -1,0 +1,5 @@
+# Ablation: circular manifold without obstacle deformation
+_base: default.yaml
+
+fcem:
+  enable_obstacle_deform: false

@@ -1,0 +1,5 @@
+# Ablation: manifold centered on evader (no prediction shift)
+_base: default.yaml
+
+fcem:
+  enable_prediction_shift: false

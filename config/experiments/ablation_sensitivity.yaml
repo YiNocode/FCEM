@@ -1,0 +1,14 @@
+_base: setup.yaml
+name: ablation_sensitivity
+section: ablation_sensitivity
+output_subdir: ablation/sensitivity
+
+sweeps:
+  - param: G_max_allowed_deg
+    values: [120, 140, 160]
+  - param: fcem.R_init
+    values: [10.0, 12.0, 14.0]
+  - param: fcem.contraction_rate
+    values: [0.08, 0.12, 0.16]
+  - param: fcem.lookahead_time
+    values: [0.5, 0.8, 1.1]

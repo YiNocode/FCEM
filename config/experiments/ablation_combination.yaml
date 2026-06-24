@@ -1,0 +1,14 @@
+_base: setup.yaml
+name: ablation_combination
+section: ablation_combination
+output_subdir: ablation/combination
+
+stacks:
+  - name: L1
+    enabled: [L1]
+  - name: L1_L2
+    enabled: [L1, L2]
+  - name: L1_L2_L3
+    enabled: [L1, L2, L3]
+  - name: full
+    enabled: [L1, L2, L3, L4]

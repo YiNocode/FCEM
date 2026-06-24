@@ -1,0 +1,27 @@
+# Legacy component-level ablations (appendix / debugging)
+# Prefer layer_validation.yaml or ablation_combination.yaml for paper experiments.
+_base: setup.yaml
+name: ablation_components
+section: ablation_components
+output_subdir: ablation/components
+
+base_method: fcem
+variants:
+  - name: full
+    flags: {}
+  - name: no_esc_dir
+    flags: { ablate_no_esc_dir: true }
+  - name: no_center_shift
+    flags: { ablate_no_center_shift: true }
+  - name: single_manifold
+    flags: { ablate_single_manifold: true }
+  - name: no_executability
+    flags: { ablate_no_executability: true }
+  - name: no_guarded_contraction
+    flags: { ablate_no_guarded_contraction: true }
+  - name: with_guarded_contraction
+    flags: { ablate_no_guarded_contraction: false }
+  - name: no_slot_vel_ff
+    flags: { ablate_no_slot_vel_ff: true }
+  - name: nearest_assign
+    flags: { ablate_nearest_assign: true }

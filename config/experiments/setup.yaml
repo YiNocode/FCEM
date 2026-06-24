@@ -1,0 +1,58 @@
+# Section 1: Experimental Setup (shared by all experiment configs)
+name: setup
+section: experimental_setup
+
+# Shared dynamics for the full experiment suite (v_e / v_p = 2.5)
+dynamics_file: dynamics/evader_faster.yaml
+
+environments:
+  - id: sim2d
+    paper_name: 2D point-mass simulation
+    entry: envs/sim2d.py
+    status: runnable
+  - id: pybullet
+    paper_name: PyBullet / PyFlyt 2.5D
+    entry: envs/pyflyt_env.py
+    runner: experiments/run_pyflyt.py
+    status: stub
+  - id: gazebo_px4_sitl
+    paper_name: Gazebo + PX4 SITL
+    entry: envs/px4_env.py
+    runner: experiments/run_px4.sh
+    status: stub
+
+baselines:
+  - fcem
+  - pure_pursuit
+  - fixed_ring
+  - deghat_circumnavigation
+  - kou_xiang_fencing
+  - fang_relay_2022
+  - relay_pursuit
+  - liao_mpc
+  - yu_consensus
+  - open_marl
+
+scenarios:
+  - free
+  - random_obstacles
+  - single_exit
+
+metrics:
+  pre_capture_window: 20
+  primary:
+    - success_rate
+    - time_to_capture
+    - D_ang
+    - C_cov
+    - G_max
+    - C_sync
+    - pre_capture_D_ang
+    - pre_capture_C_cov
+    - pre_capture_G_max_deg
+    - pre_capture_C_sync
+  supplementary:
+    - C_col
+    - timing_ms
+
+output_subdir: experiments

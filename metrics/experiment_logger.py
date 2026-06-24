@@ -1,0 +1,153 @@
+"""Per-step experiment logging."""
+
+from __future__ import annotations
+
+import json
+import math
+import time
+from dataclasses import dataclass, field, asdict
+from pathlib import Path
+from typing import Any
+
+import numpy as np
+
+
+class TimingBlock:
+    """Context manager for timing code blocks in milliseconds."""
+
+    def __enter__(self) -> TimingBlock:
+        self._t0 = time.perf_counter()
+        return self
+
+    def __exit__(self, *args: object) -> None:
+        self._t1 = time.perf_counter()
+
+    @property
+    def ms(self) -> float:
+        return (self._t1 - self._t0) * 1000.0
+
+
+def _to_jsonable(obj: Any) -> Any:
+    if isinstance(obj, np.ndarray):
+        return obj.tolist()
+    if isinstance(obj, np.floating):
+        return float(obj)
+    if isinstance(obj, np.integer):
+        return int(obj)
+    if isinstance(obj, dict):
+        return {k: _to_jsonable(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_to_jsonable(v) for v in obj]
+    return obj
+
+
+@dataclass
+class StepRecord:
+    step: int
+    D_ang: float
+    C_cov: float
+    G_max: float
+    C_col: float
+    timing_ms: float
+    C_sync: float = 0.0
+    R: float = 0.0
+    q: float = 0.0
+    slot_error: float = 0.0
+    phase: str = ""
+    evader: list[float] = field(default_factory=list)
+    pursuers: list[list[float]] = field(default_factory=list)
+    timing_detail: dict[str, float] = field(default_factory=dict)
+    extra: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class ExperimentLogger:
+    out_dir: Path | str
+    method: str
+    scenario: str
+    trial: int
+    config: dict[str, Any]
+    records: list[StepRecord] = field(default_factory=list)
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        self.out_dir = Path(self.out_dir)
+        self.run_id = f"{self.method}_{self.scenario}_t{self.trial:03d}"
+
+    def log_step(self, frame: dict[str, Any]) -> None:
+        """Log from a simulation frame dict."""
+        metrics = frame["metrics"]
+        timing_raw = frame.get("timing_ms", 0.0)
+        if isinstance(timing_raw, dict):
+            timing_ms = float(timing_raw.get("total_ms", 0.0))
+        else:
+            timing_ms = float(timing_raw)
+
+        timing_detail = timing_raw if isinstance(timing_raw, dict) else {}
+        extra = {
+            k: v
+            for k, v in frame.items()
+            if k
+            not in (
+                "step",
+                "metrics",
+                "timing_ms",
+                "evader",
+                "evader_v",
+                "pursuers",
+                "pursuer_v",
+                "captured",
+                "curve",
+                "slots",
+            )
+        }
+        rec = StepRecord(
+            step=int(frame["step"]),
+            D_ang=float(metrics["D_ang"]),
+            C_cov=float(metrics["C_cov"]),
+            G_max=float(metrics["G_max"]),
+            C_col=float(metrics["C_col"]),
+            C_sync=float(metrics.get("C_sync", frame.get("C_sync", 0.0))),
+            timing_ms=timing_ms,
+            R=float(frame.get("R", 0.0)),
+            q=float(frame.get("q", 0.0)),
+            slot_error=float(frame.get("slot_error", 0.0)),
+            phase=str(frame.get("phase", "")),
+            evader=_to_jsonable(frame["evader"]),
+            pursuers=_to_jsonable(frame["pursuers"]),
+            timing_detail=_to_jsonable(timing_detail),
+            extra=_to_jsonable(extra),
+        )
+        self.records.append(rec)
+
+    def finalize(self, summary: dict[str, Any]) -> Path:
+        self.metadata.update(summary)
+        return self.save()
+
+    def save(self) -> Path:
+        self.out_dir.mkdir(parents=True, exist_ok=True)
+        path = self.out_dir / f"{self.run_id}.json"
+        payload = {
+            "run_id": self.run_id,
+            "method": self.method,
+            "scenario": self.scenario,
+            "trial": self.trial,
+            "config": _to_jsonable(self.config),
+            "metadata": _to_jsonable(self.metadata),
+            "records": [asdict(r) for r in self.records],
+        }
+        path.write_text(json.dumps(_to_jsonable(payload), indent=2), encoding="utf-8")
+        return path
+
+    def summary_metrics(self) -> dict[str, float]:
+        if not self.records:
+            return {}
+        timings = [r.timing_ms for r in self.records]
+        return {
+            "mean_timing_ms": float(np.mean(timings)),
+            "max_timing_ms": float(np.max(timings)),
+            "final_D_ang": self.records[-1].D_ang,
+            "final_C_cov": self.records[-1].C_cov,
+            "final_G_max_deg": math.degrees(self.records[-1].G_max),
+            "final_C_col": self.records[-1].C_col,
+        }

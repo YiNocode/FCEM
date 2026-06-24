@@ -1,0 +1,18 @@
+_base: comparison.yaml
+name: evader_faster_comparison
+section: comparative_evaluation
+description: Evader speed advantage (v_e/v_p = 2.5 via dynamics/evader_faster.yaml)
+
+output_subdir: comparison_evader_faster
+
+dynamics_file: dynamics/evader_faster.yaml
+
+methods:
+  - fcem
+  - pure_pursuit
+  - fixed_ring
+
+scenarios:
+  - free
+  - random_obstacles
+  - single_exit

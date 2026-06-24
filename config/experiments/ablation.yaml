@@ -1,0 +1,2 @@
+# Legacy alias — use ablation_components.yaml
+_base: ablation_components.yaml

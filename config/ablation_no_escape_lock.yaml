@@ -1,0 +1,5 @@
+# Ablation: disable escape-direction phase lock
+_base: default.yaml
+
+fcem:
+  enable_escape_lock: false

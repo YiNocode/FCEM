@@ -1,0 +1,16 @@
+_base: setup.yaml
+name: layer_validation
+section: layer_validation
+output_subdir: layer_validation
+
+variants:
+  - name: full
+    remove_layer: null
+  - name: w_o_L1
+    remove_layer: L1
+  - name: w_o_L2
+    remove_layer: L2
+  - name: w_o_L3
+    remove_layer: L3
+  - name: w_o_L4
+    remove_layer: L4

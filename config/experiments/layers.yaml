@@ -1,0 +1,37 @@
+# FCEM layer definitions (L1–L4 ↔ E1–E4)
+layers:
+  - id: L1
+    experiment: E1
+    name: evader_prediction
+    module: fcem/evader_prediction.py
+    description: Escape direction + prediction-centered manifold center
+    remove_flags:
+      ablate_no_esc_dir: true
+      ablate_no_center_shift: true
+
+  - id: L2
+    experiment: E2
+    name: fcem_manifold
+    module: fcem/manifold_generation.py
+    description: Multi-candidate FCEM manifold generation
+    remove_flags:
+      ablate_single_manifold: true
+
+  - id: L3
+    experiment: E3
+    name: executability_assignment
+    module: fcem/slot_assignment.py
+    description: Executability rollout + optimal slot assignment
+    remove_flags:
+      ablate_no_executability: true
+      ablate_nearest_assign: true
+
+  - id: L4
+    experiment: E4
+    name: slot_velocity_tracking
+    module: fcem/low_level/pd_tracker.py
+    description: Slot velocity feedforward + low-level PD tracking (guarded contraction disabled by default)
+    remove_flags:
+      ablate_no_slot_vel_ff: true
+
+layer_order: [L1, L2, L3, L4]

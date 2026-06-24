@@ -1,0 +1,5 @@
+# Ablation: no slot velocity feedforward
+_base: default.yaml
+
+fcem:
+  enable_slot_feedforward: false

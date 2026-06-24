@@ -1,0 +1,6 @@
+# Ablation: nearest assignment only (no rollout, no inertia)
+_base: default.yaml
+
+fcem:
+  enable_executability_rollout: false
+  enable_assignment_inertia: false

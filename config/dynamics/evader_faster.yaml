@@ -1,0 +1,5 @@
+# Evader faster than pursuers (v_e / v_p = 2.5; used by run_all_experiments suite)
+pursuer_vmax: 4.0
+pursuer_amax: 3.2
+evader_vmax: 10.0
+evader_amax: 4.0

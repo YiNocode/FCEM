@@ -1,0 +1,19 @@
+name: random_obstacles
+description: 8 random cylindrical obstacles in 40x40m arena
+obstacles:
+  - center: [8.4, 10.2]
+    radius: 0.65
+  - center: [15.6, 16.8]
+    radius: 0.70
+  - center: [22.4, 12.6]
+    radius: 0.75
+  - center: [29.0, 18.2]
+    radius: 0.65
+  - center: [12.2, 26.4]
+    radius: 0.70
+  - center: [21.0, 29.6]
+    radius: 0.68
+  - center: [31.6, 28.4]
+    radius: 0.72
+  - center: [17.8, 7.2]
+    radius: 0.60
