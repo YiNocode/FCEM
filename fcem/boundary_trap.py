@@ -146,16 +146,17 @@ def structural_metrics_free_cone(
     pursuers: np.ndarray,
     trap: TrapState,
 ) -> dict[str, float]:
-    """Metrics over free escape cone; walls act as virtual blockers."""
-    if trap.mode == "open_space":
-        from metrics.structure import structural_metrics_from_positions
+    """Trap-aware free-cone metrics plus full-circle canonical encirclement metrics."""
+    from metrics.structure import structural_metrics_from_positions
 
-        m = structural_metrics_from_positions(target, pursuers)
+    canonical = structural_metrics_from_positions(target, pursuers)
+
+    if trap.mode == "open_space":
         return {
-            **m,
-            "D_free": m["D_ang"],
-            "C_free": m["C_cov"],
-            "G_free": m["G_max"],
+            **canonical,
+            "D_free": canonical["D_ang"],
+            "C_free": canonical["C_cov"],
+            "G_free": canonical["G_max"],
             "phi_free": 2.0 * math.pi,
             "mode": "open_space",
         }
@@ -170,10 +171,7 @@ def structural_metrics_free_cone(
     cone_angles = angles[in_cone]
     if len(cone_angles) == 0:
         return {
-            "D_ang": 0.0,
-            "C_cov": 0.0,
-            "G_max": trap.phi_free,
-            "C_col": 1.0,
+            **canonical,
             "D_free": 0.0,
             "C_free": 0.0,
             "G_free": trap.phi_free,
@@ -202,15 +200,8 @@ def structural_metrics_free_cone(
     G_free = float(np.max(all_gaps)) if len(all_gaps) else trap.phi_free
     C_free = float(np.clip(1.0 - G_free / (trap.phi_free + 1e-9), 0.0, 1.0))
 
-    centroid = np.mean(pursuers[in_cone], axis=0) if np.any(in_cone) else np.mean(pursuers, axis=0)
-    mean_radius = float(np.mean(radii[in_cone])) if np.any(in_cone) else float(np.mean(radii))
-    C_col = float(norm(centroid - target) / (mean_radius + 1e-6))
-
     return {
-        "D_ang": D_free,
-        "C_cov": C_free,
-        "G_max": G_free,
-        "C_col": C_col,
+        **canonical,
         "D_free": D_free,
         "C_free": C_free,
         "G_free": G_free,

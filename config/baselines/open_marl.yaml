@@ -13,40 +13,91 @@ deterministic: true
 
 reward:
   capture_reward: 6.0
-  distance_coef: 0.1
+  loose_capture_bonus: 3.0
+  distance_coef: 0.05
+  proximity_coef: 0.25
+  spread_coef: 3.0
+  structure_penalty_coef: 0.02
   collision_penalty: 10.0
-  smoothness_coef: 0.01
+  smoothness_coef: 4.0
   safety_margin: 0.15
+  reward_scale: 1.0
+  reward_clip: 10.0
+  use_smoothness: false
+  capture_mode: strict
 
 mappo:
-  train_every: 64
+  train_every: 2048
   num_minibatches: 16
   ppo_epochs: 4
-  tp_epochs: 1
   clip_param: 0.1
-  entropy_coef: 0.01
+  value_clip_param: 0.2
+  entropy_coef: 0.05
   gae_lambda: 0.95
   gamma: 0.995
-  max_grad_norm: 10.0
+  max_grad_norm: 1.0
   normalize_advantages: true
   actor_lr: 0.0005
   critic_lr: 0.0005
   epn_loss_coef: 1.0
 
+aeg:
+  local_prob: 0.7
+  sigma_min: 0.5
+  sigma_max: 0.9
+  position_noise: 3.0
+  archive_max: 256
+
+curriculum:
+  phases:
+    - name: easy
+      step_fraction_end: 0.35
+      scenarios: [free]
+      dynamics:
+        pursuer_vmax: 5.0
+        evader_vmax: 3.0
+        evader_amax: 2.0
+      center_init: true
+      capture_mode: loose
+      episode_max_steps: 600
+      reward_overrides:
+        spread_coef: 4.0
+        proximity_coef: 0.35
+    - name: medium
+      step_fraction_end: 0.75
+      scenarios: [free]
+      dynamics:
+        pursuer_vmax: 4.5
+        evader_vmax: 6.0
+      capture_mode: loose
+      episode_max_steps: 900
+    - name: hard
+      step_fraction_end: 1.0
+      scenarios: [free, random_obstacles, single_exit]
+      dynamics:
+        pursuer_vmax: 4.0
+        evader_vmax: 10.0
+      capture_mode: strict
+      use_aeg: true
+
 training:
-  n_envs: 32
-  total_steps: 500000
-  # RL 训练用较短 episode（FCEM 对比实验仍为 max_steps=1200）
-  episode_max_steps: 1000
+  n_envs: 64
+  total_steps: 15000000
+  episode_max_steps: 1200
   scenarios:
     - free
     - random_obstacles
     - single_exit
   log_every: 1000
-  # global_step = 所有并行 env 的步数之和；默认约每轮 episode 评估一次
   eval_every: null
   eval_episodes: 32
   seed: 42
+  stages:
+    stage1:
+      total_steps: 10500000
+    stage2:
+      total_steps: 4500000
+      global_step_start: 10500000
 
 network:
   hidden_units: [256, 256, 256]

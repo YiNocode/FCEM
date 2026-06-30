@@ -50,6 +50,62 @@ def angular_mismatch_cost(
     return float(np.clip(diff / np.pi, 0.0, 1.0))
 
 
+def ordered_coverage_cost(
+    pursuers: np.ndarray,
+    slots: np.ndarray,
+    assignment: tuple[int, ...],
+    target: np.ndarray,
+) -> tuple[float, float]:
+    """Penalty for assignments that scramble the angular ordering around target."""
+    n = len(assignment)
+    if n <= 1:
+        return 0.0, 1.0
+
+    pursuer_angles = np.arctan2(pursuers[:, 1] - target[1], pursuers[:, 0] - target[0])
+    assigned_slots = slots[list(assignment)]
+    slot_angles = np.arctan2(
+        assigned_slots[:, 1] - target[1],
+        assigned_slots[:, 0] - target[0],
+    )
+
+    pursuer_order = np.argsort(pursuer_angles % (2.0 * np.pi))
+    ordered_slot_angles = slot_angles[pursuer_order] % (2.0 * np.pi)
+    slot_ranks = np.argsort(np.argsort(ordered_slot_angles))
+
+    inversions = 0
+    for a in range(n):
+        for b in range(a + 1, n):
+            if slot_ranks[a] > slot_ranks[b]:
+                inversions += 1
+
+    max_inversions = n * (n - 1) / 2.0
+    cost = inversions / max(max_inversions, 1.0)
+    coverage = 1.0 - cost
+    return float(cost), float(coverage)
+
+
+def sector_violation_cost(
+    pursuer: np.ndarray,
+    slot: np.ndarray,
+    target: np.ndarray,
+    n: int,
+) -> float:
+    """Penalty when a pursuer is assigned outside its local angular sector."""
+    if n <= 1:
+        return 0.0
+    vec_p = pursuer - target
+    vec_s = slot - target
+    if norm(vec_p) < 1e-9 or norm(vec_s) < 1e-9:
+        return 0.0
+    ang_p = np.arctan2(vec_p[1], vec_p[0])
+    ang_s = np.arctan2(vec_s[1], vec_s[0])
+    diff = abs(wrap_angle(ang_p - ang_s))
+    free_half_sector = np.pi / n
+    if diff <= free_half_sector:
+        return 0.0
+    return float(np.clip((diff - free_half_sector) / (np.pi - free_half_sector), 0.0, 1.0))
+
+
 def segment_obstacle_cost(
     pursuer: np.ndarray,
     slot: np.ndarray,

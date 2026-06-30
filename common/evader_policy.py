@@ -13,6 +13,8 @@ from common.dynamics import norm, unit
 POLICIES = {
     "apf": evader_apf_step,
     "game": evader_game_step,
+    "differential_game": evader_game_step,
+    "differential-game": evader_game_step,
 }
 
 
@@ -48,7 +50,7 @@ def evader_kwargs_from_config(cfg: dict[str, Any]) -> dict[str, Any]:
     policy = str(cfg.get("evader_policy", "game")).lower()
     if policy == "apf":
         return {"policy": "apf", **evader_apf_kwargs_from_config(cfg)}
-    return {"policy": "game", **evader_game_kwargs_from_config(cfg)}
+    return {"policy": policy, **evader_game_kwargs_from_config(cfg)}
 
 
 def estimate_escape_direction(
@@ -58,6 +60,7 @@ def estimate_escape_direction(
     pursuers: np.ndarray | None = None,
     policy: str = "game",
     pursuer_vmax: float = 5.0,
+    evader_vmax: float = 3.5,
     horizon: float = 0.85,
 ) -> np.ndarray:
     """FCEM-compatible escape direction estimate under active evader policy."""
@@ -77,6 +80,7 @@ def estimate_escape_direction(
             pursuers,
             pursuer_vmax,
             horizon=horizon,
+            evader_vmax=evader_vmax,
         )
     if norm(esc) < 1e-9:
         esc = np.array([1.0, 0.0])

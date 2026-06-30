@@ -5,6 +5,10 @@ from __future__ import annotations
 import math
 from typing import Any
 
+import numpy as np
+
+from metrics.structure import structural_metrics_from_positions
+
 
 def step_metric_value(step: dict[str, Any], key: str) -> float | None:
     if key in step and step[key] not in ("", None):
@@ -44,6 +48,116 @@ def pre_capture_step_window(
     return eligible[-k:]
 
 
+def canonical_metrics_from_step(step: dict[str, Any]) -> dict[str, float] | None:
+    """Full-circle D_ang / C_cov / G_max recomputed from logged positions."""
+    evader = step.get("evader")
+    pursuers = step.get("pursuers")
+    if evader is None or pursuers is None:
+        return None
+    return structural_metrics_from_positions(
+        np.asarray(evader, dtype=float),
+        np.asarray(pursuers, dtype=float),
+    )
+
+
+def _mean_struct_from_window(window: list[dict[str, Any]]) -> dict[str, float | str]:
+    d_vals, c_vals, g_vals, sync_vals = [], [], [], []
+    for s in window:
+        canon = canonical_metrics_from_step(s)
+        if canon is not None:
+            d_vals.append(canon["D_ang"])
+            c_vals.append(canon["C_cov"])
+            g_vals.append(math.degrees(canon["G_max"]))
+        else:
+            d = step_metric_value(s, "D_ang")
+            c = step_metric_value(s, "C_cov")
+            g = step_metric_value(s, "G_max")
+            if d is not None:
+                d_vals.append(d)
+            if c is not None:
+                c_vals.append(c)
+            if g is not None:
+                g_vals.append(math.degrees(g))
+        sync = step_metric_value(s, "C_sync")
+        if sync is not None:
+            sync_vals.append(sync)
+    return {
+        "D_ang": sum(d_vals) / len(d_vals) if d_vals else "",
+        "C_cov": sum(c_vals) / len(c_vals) if c_vals else "",
+        "G_max_deg": sum(g_vals) / len(g_vals) if g_vals else "",
+        "C_sync": sum(sync_vals) / len(sync_vals) if sync_vals else "",
+    }
+
+
+def capture_structure_metrics(
+    steps: list[dict[str, Any]],
+    capture_step: int | None,
+    captured: bool,
+) -> dict[str, float | str]:
+    """Structural metrics on the capture step (D_ang, C_cov, G_max at capture)."""
+    empty: dict[str, float | str] = {
+        "capture_D_ang": "",
+        "capture_C_cov": "",
+        "capture_G_max_deg": "",
+    }
+    if not captured or capture_step is None:
+        return empty
+
+    window = pre_capture_step_window(steps, capture_step, 1)
+    if not window:
+        return empty
+
+    means = _mean_struct_from_window(window)
+    return {
+        "capture_D_ang": means["D_ang"],
+        "capture_C_cov": means["C_cov"],
+        "capture_G_max_deg": means["G_max_deg"],
+    }
+
+
+def pre_capture_labeled_metrics(
+    steps: list[dict[str, Any]],
+    capture_step: int | None,
+    captured: bool,
+    k: int,
+    label: str,
+) -> dict[str, float | str]:
+    """Mean structural metrics over the last ``k`` steps; keys prefixed with ``label``."""
+    empty: dict[str, float | str] = {
+        f"{label}_D_ang": "",
+        f"{label}_C_cov": "",
+        f"{label}_G_max_deg": "",
+        f"{label}_n_steps": "",
+    }
+    if not captured or capture_step is None or k <= 0:
+        return empty
+
+    window = pre_capture_step_window(steps, capture_step, k)
+    if not window:
+        return empty
+
+    means = _mean_struct_from_window(window)
+    return {
+        f"{label}_D_ang": means["D_ang"],
+        f"{label}_C_cov": means["C_cov"],
+        f"{label}_G_max_deg": means["G_max_deg"],
+        f"{label}_n_steps": len(window),
+    }
+
+
+def capture_window_metrics(
+    steps: list[dict[str, Any]],
+    capture_step: int | None,
+    captured: bool,
+) -> dict[str, float | str]:
+    """Capture-step + final-5 + final-10 pre-capture structural metrics."""
+    out: dict[str, float | str] = {}
+    out.update(capture_structure_metrics(steps, capture_step, captured))
+    out.update(pre_capture_labeled_metrics(steps, capture_step, captured, 5, "pre_capture_5"))
+    out.update(pre_capture_labeled_metrics(steps, capture_step, captured, 10, "pre_capture_10"))
+    return out
+
+
 def pre_capture_structure_metrics(
     steps: list[dict[str, Any]],
     capture_step: int | None,
@@ -70,26 +184,12 @@ def pre_capture_structure_metrics(
     if not window:
         return empty
 
-    d_vals, c_vals, g_vals, sync_vals = [], [], [], []
-    for s in window:
-        d = step_metric_value(s, "D_ang")
-        c = step_metric_value(s, "C_cov")
-        g = step_metric_value(s, "G_max")
-        sync = step_metric_value(s, "C_sync")
-        if d is not None:
-            d_vals.append(d)
-        if c is not None:
-            c_vals.append(c)
-        if g is not None:
-            g_vals.append(math.degrees(g))
-        if sync is not None:
-            sync_vals.append(sync)
-
+    means = _mean_struct_from_window(window)
     return {
-        "pre_capture_D_ang": sum(d_vals) / len(d_vals) if d_vals else "",
-        "pre_capture_C_cov": sum(c_vals) / len(c_vals) if c_vals else "",
-        "pre_capture_G_max_deg": sum(g_vals) / len(g_vals) if g_vals else "",
-        "pre_capture_C_sync": sum(sync_vals) / len(sync_vals) if sync_vals else "",
+        "pre_capture_D_ang": means["D_ang"],
+        "pre_capture_C_cov": means["C_cov"],
+        "pre_capture_G_max_deg": means["G_max_deg"],
+        "pre_capture_C_sync": means["C_sync"],
         "pre_capture_window": k,
         "pre_capture_n_steps": len(window),
     }

@@ -25,9 +25,13 @@ from experiments.config_loader import (
     load_experiment_config,
     obstacles_from_scenario,
 )
-from experiments.runner_args import add_dynamics_args, dynamics_overrides_from_args
-from experiments.runner_common import run_fcem_trial, trial_summary
-from metrics.pre_capture import pre_capture_k_from_config, pre_capture_structure_metrics
+from experiments.runner_args import add_dynamics_args, add_run_output_args, dynamics_overrides_from_args, run_output_kwargs_from_args
+from experiments.runner_common import (
+    enrich_trial_structure_metrics,
+    format_trial_progress_line,
+    run_fcem_trial,
+    trial_summary,
+)
 
 
 def run_trial(
@@ -64,16 +68,8 @@ def run_trial(
     logger = ExperimentLogger(out_dir, method, scenario_name, trial_id, cfg)
     for frame in result["frames"]:
         logger.log_step(frame)
-    summary = trial_summary(result, cfg["dt"])
-    k_pre = pre_capture_k_from_config(cfg)
-    summary.update(
-        pre_capture_structure_metrics(
-            result["frames"],
-            summary.get("capture_step"),
-            summary.get("captured", False),
-            k=k_pre,
-        )
-    )
+    summary = trial_summary(result, cfg["dt"], cfg)
+    enrich_trial_structure_metrics(summary, result["frames"], cfg)
     logger.finalize(summary)
     return summary
 
@@ -90,10 +86,15 @@ def main() -> None:
         help="experiment config (use evader_faster_comparison.yaml for v_e > v_p)",
     )
     add_dynamics_args(parser)
+    add_run_output_args(parser)
     args = parser.parse_args()
 
     exp_cfg = load_experiment_config(Path(args.config))
-    base = build_experiment_base_config(exp_cfg, dynamics_overrides_from_args(args))
+    base = build_experiment_base_config(
+        exp_cfg,
+        dynamics_overrides_from_args(args),
+        **run_output_kwargs_from_args(args),
+    )
     n_trials = args.trials if args.trials is not None else base["n_trials"]
     methods = args.methods or exp_cfg["methods"]
     scenarios = args.scenarios or exp_cfg["scenarios"]
@@ -102,7 +103,7 @@ def main() -> None:
     print(f"Output: {base.get('output_dir')}")
     print(f"Trials={n_trials}, methods={methods}, scenarios={scenarios}\n")
 
-    results: list[tuple[str, str, float, float | None, int]] = []
+    results: list[tuple[str, str, float, float | None, float | None, int]] = []
     for method in methods:
         method_key = normalize_method(method)
         if method_key not in METHODS:
@@ -110,26 +111,34 @@ def main() -> None:
         for scenario in scenarios:
             captures = 0
             times: list[float] = []
+            times_adj: list[float] = []
             for trial in range(n_trials):
                 summary = run_trial(method_key, scenario, trial, base)
                 captures += int(summary["captured"])
                 if summary.get("time_to_capture_s") is not None:
                     times.append(float(summary["time_to_capture_s"]))
-                status = "OK" if summary["captured"] else summary.get("failure_reason", "timeout")
+                if summary.get("time_to_capture_adj_s") is not None:
+                    times_adj.append(float(summary["time_to_capture_adj_s"]))
                 print(
-                    f"{method}/{scenario} trial {trial}: "
-                    f"captured={summary['captured']}, steps={summary['num_steps']}, {status}"
+                    format_trial_progress_line(
+                        summary,
+                        prefix=f"{method}/{scenario} trial {trial}",
+                    )
                 )
             rate = captures / n_trials
             mean_t = sum(times) / len(times) if times else None
-            results.append((method, scenario, rate, mean_t, captures))
-            t_str = f", mean_capture={mean_t:.1f}s" if mean_t is not None else ""
-            print(f"==> {method}/{scenario} capture rate: {rate:.2%} ({captures}/{n_trials}){t_str}\n")
+            mean_t_adj = sum(times_adj) / len(times_adj) if times_adj else None
+            results.append((method, scenario, rate, mean_t, mean_t_adj, captures))
+            t_str = f", cond_TTC={mean_t:.1f}s" if mean_t is not None else ""
+            adj_str = f", adj_TTC={mean_t_adj:.1f}s" if mean_t_adj is not None else ""
+            print(f"==> {method}/{scenario} capture rate: {rate:.2%} ({captures}/{n_trials}){t_str}{adj_str}\n")
 
     print("=== Summary ===")
-    for method, scenario, rate, mean_t, captures in results:
-        t_str = f"  mean_t={mean_t:.1f}s" if mean_t is not None else ""
-        print(f"  {method:15s} {scenario:20s} {rate:.2%} ({captures}/{n_trials}){t_str}")
+    print(f"  {'method':15s} {'scenario':20s} {'success':>8}  {'cond_TTC':>9}  {'adj_TTC':>9}")
+    for method, scenario, rate, mean_t, mean_t_adj, captures in results:
+        cond_s = f"{mean_t:8.1f}s" if mean_t is not None else "     n/a"
+        adj_s = f"{mean_t_adj:8.1f}s" if mean_t_adj is not None else "     n/a"
+        print(f"  {method:15s} {scenario:20s} {rate:7.1%}  {cond_s}  {adj_s}")
 
 
 if __name__ == "__main__":

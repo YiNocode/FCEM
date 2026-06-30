@@ -4,10 +4,17 @@ from __future__ import annotations
 
 import argparse
 import csv
+import sys
 from collections import defaultdict
 from pathlib import Path
 
+ROOT = Path(__file__).resolve().parent.parent
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
 import matplotlib.pyplot as plt
+
+from experiments.run_paths import add_run_dir_arg, resolve_run_paths
 
 
 def _to_bool(val: object) -> bool:
@@ -78,11 +85,14 @@ def plot_sensitivity(csv_path: Path, out_dir: Path, section: str = "ablation") -
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--csv", type=str, default="results/aggregated.csv")
-    parser.add_argument("--out-dir", type=str, default="results/figures")
+    add_run_dir_arg(parser)
+    parser.add_argument("--csv", type=str, default=None)
+    parser.add_argument("--out-dir", type=str, default=None)
     parser.add_argument("--section", type=str, default="ablation")
     args = parser.parse_args()
-    plot_sensitivity(Path(args.csv), Path(args.out_dir), section=args.section)
+    paths = resolve_run_paths(args, experiment_name="ablation_combination")
+    out_dir = Path(args.out_dir) if args.out_dir else paths.figures_dir
+    plot_sensitivity(paths.aggregated_csv, out_dir, section=args.section)
 
 
 if __name__ == "__main__":

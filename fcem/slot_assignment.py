@@ -12,7 +12,9 @@ from common.obstacles import Obstacle
 from metrics.sync import (
     angular_mismatch_cost,
     estimate_arrival_times,
+    ordered_coverage_cost,
     segment_obstacle_cost,
+    sector_violation_cost,
     sync_coverage,
 )
 
@@ -21,6 +23,8 @@ from metrics.sync import (
 class AssignmentWeights:
     w_reach: float = 1.0
     w_ang: float = 0.30
+    w_cov: float = 0.0
+    w_sector: float = 0.0
     w_sync: float = 0.50
     w_switch: float = 1.0
     w_safe: float = 0.40
@@ -34,6 +38,8 @@ def assignment_weights_from_config(
     weights = AssignmentWeights(
         w_reach=float(raw.get("w_reach", 1.0)),
         w_ang=float(raw.get("w_ang", 0.30)),
+        w_cov=float(raw.get("w_cov", 0.0)),
+        w_sector=float(raw.get("w_sector", 0.0)),
         w_sync=float(raw.get("w_sync", 0.50)),
         w_switch=float(raw.get("w_switch", 1.0)),
         w_safe=float(raw.get("w_safe", 0.40)),
@@ -61,6 +67,7 @@ def assignment_cost_jij(
 ) -> tuple[float, dict[str, float]]:
     J_reach = 0.0
     J_ang = 0.0
+    J_sector = 0.0
     J_switch = 0.0
     J_safe = 0.0
 
@@ -68,10 +75,12 @@ def assignment_cost_jij(
         slot = slots[j]
         J_reach += norm(pursuers[i] - slot)
         J_ang += angular_mismatch_cost(pursuers[i], slot, target)
+        J_sector += sector_violation_cost(pursuers[i], slot, target, len(assignment))
         J_safe += segment_obstacle_cost(pursuers[i], slot, obstacles, clearance)
         if not ablate_nearest_assign and prev_assignment is not None and j != prev_assignment[i]:
             J_switch += inertia
 
+    J_cov, C_cov_ordered = ordered_coverage_cost(pursuers, slots, assignment, target)
     T_hats = estimate_arrival_times(
         pursuers, pursuer_v, slots, assignment, vmax, v_min_frac
     )
@@ -81,6 +90,8 @@ def assignment_cost_jij(
     total = (
         weights.w_reach * J_reach
         + weights.w_ang * J_ang
+        + weights.w_cov * J_cov
+        + weights.w_sector * J_sector
         + weights.w_sync * J_sync
         + weights.w_switch * J_switch
         + weights.w_safe * J_safe
@@ -88,6 +99,9 @@ def assignment_cost_jij(
     components = {
         "J_reach": float(J_reach),
         "J_ang": float(J_ang),
+        "J_cov": float(J_cov),
+        "C_cov_ordered": float(C_cov_ordered),
+        "J_sector": float(J_sector),
         "J_sync": float(J_sync),
         "J_switch": float(J_switch),
         "J_safe": float(J_safe),
@@ -119,6 +133,32 @@ def assign_slots(
     obstacles = obstacles or []
     pursuer_v = pursuer_v if pursuer_v is not None else np.zeros_like(pursuers)
     target = target if target is not None else np.mean(slots, axis=0)
+
+    if ablate_nearest_assign:
+        remaining = set(range(n))
+        greedy: list[int] = []
+        for i in range(n):
+            j = min(remaining, key=lambda idx: norm(pursuers[i] - slots[idx]))
+            greedy.append(j)
+            remaining.remove(j)
+        assignment = tuple(greedy)
+        cost, components = assignment_cost_jij(
+            pursuers,
+            pursuer_v,
+            slots,
+            assignment,
+            None,
+            target,
+            obstacles,
+            weights,
+            0.0,
+            tau_T,
+            vmax,
+            v_min_frac,
+            clearance,
+            True,
+        )
+        return assignment, cost, components
 
     best_cost = None
     best_perm = None

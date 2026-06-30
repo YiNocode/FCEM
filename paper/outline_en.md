@@ -6,7 +6,7 @@ Flow-Constrained Encirclement Manifold (FCEM) for Multi-Pursuer Capture in Clutt
 ## Abstract
 - Problem: cooperative encirclement and capture of a faster-evading target with obstacles
 - Method: escape-aware dynamic manifold, executability-aware assignment, guarded contraction
-- Results: 3 pursuers, 40×40 m arena, four-section evaluation vs baselines and ablations
+- Results: 3 pursuers, 40×40 m arena, reproducible 2D evaluation vs baselines and ablations; PyFlyt/PX4 remain extension paths
 
 ## 1. Introduction
 - Multi-agent pursuit–evasion in robotics
@@ -18,7 +18,7 @@ Flow-Constrained Encirclement Manifold (FCEM) for Multi-Pursuer Capture in Clutt
 
 ## 3. Problem Formulation
 - Point-mass dynamics, workspace, obstacles
-- Capture condition: all pursuers within capture_radius AND G_max ≤ G_max_allowed
+- Capture condition: default `escape_sector` mode, requiring all pursuers within `capture_radius` and feasible escape-sector closure (`G_esc ≤ 30°`, `C_esc ≥ 0.85`); `G_max ≤ 140°` remains a full-circle structural metric / compatibility mode
 
 ## 4. FCEM Method
 ### 4.1 L1 / E1: Evader prediction (escape direction, manifold center)
@@ -29,9 +29,9 @@ Flow-Constrained Encirclement Manifold (FCEM) for Multi-Pursuer Capture in Clutt
 ## 5. Experiments (four sections)
 
 ### VI-A Experimental Setup
-- Environments: 2D (main stats), PyBullet/PyFlyt 2.5D, Gazebo+PX4 SITL (showcase)
-- Baselines: FCEM, pure pursuit APF, fixed ring APF
-- Metrics: success rate, time-to-capture, D_ang, C_cov, G_max
+- Environments: 2D point-mass benchmark; PyBullet/PyFlyt 2.5D and Gazebo+PX4 SITL are extension interfaces
+- Baselines: FCEM, pure_pursuit, ac_baseline, liao_mpc; open_marl is optional after local checkpoint training
+- Metrics: success rate, time-to-capture, D_ang, C_cov, G_max, C_sync, C_esc, G_esc
 
 ### VI-B Layer-wise Validation (E1–E4)
 - Tab. X: Layer → Experiment mapping (`layers.yaml`)
@@ -39,7 +39,7 @@ Flow-Constrained Encirclement Manifold (FCEM) for Multi-Pursuer Capture in Clutt
 - Fig. layer-drop waterfall
 
 ### VI-C Comparative Evaluation
-- 3 methods × 3 scenarios
+- 4 default methods × 3 scenarios; open_marl optional
 - Fig. grouped bar chart (success rate + time-to-capture)
 - Fig. normalized radar chart
 
@@ -48,8 +48,8 @@ Flow-Constrained Encirclement Manifold (FCEM) for Multi-Pursuer Capture in Clutt
 - Sensitivity: G_max_allowed, R_init, contraction_rate, lookahead_time
 - Fig. sensitivity line plots
 
-## 6. Sim2Real
-- PyFlyt 2.5D (WSL2)
+## 6. Simulation Extensions
+- PyFlyt 2.5D (WSL2 interface path)
 - PX4 + Gazebo SITL + Mighty bridge (stub)
 
 ## 7. Conclusion

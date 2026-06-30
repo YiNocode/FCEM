@@ -4,11 +4,18 @@ from __future__ import annotations
 
 import argparse
 import csv
+import sys
 from collections import defaultdict
 from pathlib import Path
 
+ROOT = Path(__file__).resolve().parent.parent
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
 import matplotlib.pyplot as plt
 import numpy as np
+
+from experiments.run_paths import add_run_dir_arg, resolve_run_paths
 
 
 def _to_bool(val: object) -> bool:
@@ -60,11 +67,14 @@ def plot_layer_drop(csv_path: Path, out_path: Path, section: str = "layer_valida
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--csv", type=str, default="results/aggregated.csv")
-    parser.add_argument("--out", type=str, default="results/figures/layer_drop_waterfall.png")
+    add_run_dir_arg(parser)
+    parser.add_argument("--csv", type=str, default=None)
+    parser.add_argument("--out", type=str, default=None)
     parser.add_argument("--section", type=str, default="layer_validation")
     args = parser.parse_args()
-    plot_layer_drop(Path(args.csv), Path(args.out), section=args.section)
+    paths = resolve_run_paths(args, experiment_name="layer_validation")
+    out = Path(args.out) if args.out else paths.figures_dir / "layer_drop_waterfall.png"
+    plot_layer_drop(paths.aggregated_csv, out, section=args.section)
 
 
 if __name__ == "__main__":

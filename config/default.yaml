@@ -51,6 +51,20 @@ local_planner:
 G_max_allowed_deg: 140.0
 G_max_gate_deg: 165.0
 
+# Capture mode: distance_only | full_circle | escape_sector
+capture_mode: escape_sector
+
+metrics:
+  G_esc_allow_deg: 30.0
+  C_esc_min: 0.85
+  escape_ray_length: 6.0
+  escape_num_angles: 720
+  escape_num_ray_samples: 40
+  pursuer_block_radius: 1.0
+  min_forward_block_dist: 0.05
+  obstacle_margin: 0.0
+  boundary_margin: 0.0
+
 # Last K steps before capture for structural metric aggregation (paper stats)
 pre_capture_window: 20
 
@@ -115,7 +129,7 @@ pyflyt:
   max_yaw_rate: 1.2
   altitude_rate_gain: 1.5
   max_vz: 0.8
-  # FCEM/fixed_ring: 规划层用运动学状态（与 sim2d 一致），物理层发速度指令
+  # FCEM slot planners: 规划层用运动学状态（与 sim2d 一致），物理层发速度指令
   use_plan_state: true
   verbose: false
   log_every: 20
@@ -134,28 +148,11 @@ ablation:
 
 # Literature baseline hyperparameters (point-mass adaptations)
 baselines:
-  deghat_circumnavigation:
-    omega_des: 0.35
-    k_radial: 1.2
-  kou_xiang_fencing:
-    fence_gain: 2.0
-    tangential_gain: 0.6
-  fang_relay_2022:
-    switch_hysteresis: 0.5
-    min_hold_steps: 8
-    lookahead_time: 0.6
-  relay_pursuit:
-    switch_dist_margin: 1.0
-    min_hold_steps: 10
-    hold_gain: 0.15
   liao_mpc:
     horizon: 6
     w_pos: 1.0
     w_u: 0.05
     w_obs: 8.0
-  yu_consensus:
-    consensus_gain: 1.0
-    adjacency: complete
   open_marl:
     n_pursuers: 3
     history_step: 10

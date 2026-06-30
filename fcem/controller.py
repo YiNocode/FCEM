@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -10,7 +11,7 @@ from common.dynamics import clip_norm, norm
 from fcem.assignment import select_best_candidate
 from fcem.contraction import contraction_gate, phase_label, update_radius
 from fcem.manifold import generate_candidate_manifolds
-from metrics.structure import structural_metrics_from_positions
+from metrics.structure import contraction_allowed, structural_metrics_from_positions
 
 
 @dataclass
@@ -23,7 +24,9 @@ class FCEMConfig:
     min_R_for_closure: float = 2.20
     D_min: float = 0.35
     C_min: float = 0.24
+    C_expand_min: float = 0.35
     G_max_allowed: float = 2.443460952792025  # 140 deg
+    G_contract_threshold_deg: float = 140.0
     slot_error_frac: float = 0.78
     slot_error_abs: float = 1.10
     lookahead_time: float = 0.80
@@ -170,6 +173,23 @@ class FCEMController:
             cfg.slot_error_abs,
         )
 
+        fcem_cfg = {
+            "C_expand_min": cfg.C_expand_min,
+            "min_R_for_closure": cfg.min_R_for_closure,
+        }
+        config = {
+            "G_contract_threshold_deg": cfg.G_contract_threshold_deg,
+            "G_max_allowed_deg": math.degrees(cfg.G_max_allowed),
+        }
+        can_contract, gate_parts, _ = contraction_allowed(
+            metrics,
+            fcem_cfg,
+            config,
+            R,
+            formation_expanded_latched=False,
+        )
+        q_parts = {**q_parts, **gate_parts}
+
         new_R = update_radius(
             R,
             q,
@@ -179,6 +199,7 @@ class FCEMController:
             cfg.expansion_rate,
             cfg.enable_guarded_contraction,
             cfg.fixed_shrink,
+            can_contract=can_contract,
         )
         self.state.R = new_R
 

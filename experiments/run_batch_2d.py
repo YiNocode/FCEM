@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parent.parent
 def main() -> None:
     parser = argparse.ArgumentParser(description="Batch 2D experiments")
     parser.add_argument("--trials", type=int, default=5)
-    parser.add_argument("--methods", nargs="+", default=["fcem", "pure_pursuit", "fixed_ring"])
+    parser.add_argument("--methods", nargs="+", default=["fcem", "pure_pursuit", "liao_mpc", "ac_baseline"])
     parser.add_argument("--scenarios", nargs="+", default=["free", "random_obstacles", "single_exit"])
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()

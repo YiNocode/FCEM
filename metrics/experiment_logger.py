@@ -41,6 +41,15 @@ def _to_jsonable(obj: Any) -> Any:
     return obj
 
 
+def _metric_float(metrics: dict[str, Any], key: str, default: float = 0.0) -> float:
+    val = metrics.get(key, default)
+    if val in ("", None):
+        return default
+    if isinstance(val, float) and math.isnan(val):
+        return float("nan")
+    return float(val)
+
+
 @dataclass
 class StepRecord:
     step: int
@@ -58,6 +67,25 @@ class StepRecord:
     pursuers: list[list[float]] = field(default_factory=list)
     timing_detail: dict[str, float] = field(default_factory=dict)
     extra: dict[str, Any] = field(default_factory=dict)
+    # Escape-sector metrics
+    C_esc: float = 0.0
+    G_esc_deg: float = 0.0
+    free_escape_angle_deg: float = 0.0
+    blocked_escape_angle_deg: float = 0.0
+    unblocked_escape_angle_deg: float = 0.0
+    exit_blockage: float = float("nan")
+    escape_status: str = ""
+    # Full-circle diagnostic aliases
+    D_ang_full: float = 0.0
+    C_cov_full: float = 0.0
+    G_max_full_deg: float = 0.0
+    # Capture condition validity flags
+    capture_condition_valid_distance: bool = False
+    capture_condition_valid_full_circle: bool = False
+    capture_condition_valid_escape_sector: bool = False
+    valid_distance_capture: bool = False
+    valid_full_circle_capture: bool = False
+    valid_escape_sector_capture: bool = False
 
 
 @dataclass
@@ -117,6 +145,47 @@ class ExperimentLogger:
             pursuers=_to_jsonable(frame["pursuers"]),
             timing_detail=_to_jsonable(timing_detail),
             extra=_to_jsonable(extra),
+            C_esc=_metric_float(metrics, "C_esc"),
+            G_esc_deg=_metric_float(metrics, "G_esc_deg"),
+            free_escape_angle_deg=_metric_float(metrics, "free_escape_angle_deg"),
+            blocked_escape_angle_deg=_metric_float(metrics, "blocked_escape_angle_deg"),
+            unblocked_escape_angle_deg=_metric_float(metrics, "unblocked_escape_angle_deg"),
+            exit_blockage=_metric_float(metrics, "exit_blockage", default=float("nan")),
+            escape_status=str(metrics.get("escape_status", "")),
+            D_ang_full=_metric_float(metrics, "D_ang_full", default=float(metrics["D_ang"])),
+            C_cov_full=_metric_float(metrics, "C_cov_full", default=float(metrics["C_cov"])),
+            G_max_full_deg=_metric_float(
+                metrics,
+                "G_max_full_deg",
+                default=math.degrees(float(metrics["G_max"])),
+            ),
+            capture_condition_valid_distance=bool(
+                metrics.get("capture_condition_valid_distance", False)
+            ),
+            capture_condition_valid_full_circle=bool(
+                metrics.get("capture_condition_valid_full_circle", False)
+            ),
+            capture_condition_valid_escape_sector=bool(
+                metrics.get("capture_condition_valid_escape_sector", False)
+            ),
+            valid_distance_capture=bool(
+                metrics.get(
+                    "valid_distance_capture",
+                    metrics.get("capture_condition_valid_distance", False),
+                )
+            ),
+            valid_full_circle_capture=bool(
+                metrics.get(
+                    "valid_full_circle_capture",
+                    metrics.get("capture_condition_valid_full_circle", False),
+                )
+            ),
+            valid_escape_sector_capture=bool(
+                metrics.get(
+                    "valid_escape_sector_capture",
+                    metrics.get("capture_condition_valid_escape_sector", False),
+                )
+            ),
         )
         self.records.append(rec)
 

@@ -12,19 +12,22 @@ from typing import Any, Callable, TextIO
 
 import numpy as np
 
-from common.capture import check_capture
+from common.capture import capture_params_from_config, evaluate_capture_conditions
 from common.dynamics import clip_to_bounds, in_bounds, wall_clearances
 from common.evader_policy import evader_kwargs_from_config, evader_step
 from common.obstacles import Obstacle, any_pursuer_obstacle_collision
 from envs.sim2d import init_from_scenario
 from fcem.boundary_trap import (
-    g_free_allowed as compute_g_free_allowed,
     structural_metrics_free_cone,
 )
 from fcem.low_level.pyflyt_command import (
     direct_velocity_setpoints_mode6,
     slot_velocities,
     velocity_setpoints_mode6,
+)
+from metrics.escape_sector_metrics import (
+    compute_escape_sector_metrics,
+    escape_metrics_config_from_config,
 )
 from metrics.structure import structural_metrics_from_positions
 
@@ -655,21 +658,62 @@ class PyFlytEnv:
                 self.evader, self.pursuers_physics
             )
 
-        g_max_allowed = math.radians(cfg["G_max_allowed_deg"])
-        g_f_allow = None
-        if trap is not None and trap.mode in ("boundary", "corner"):
-            g_f_allow = compute_g_free_allowed(trap, self.n_pursuers, cfg["G_max_allowed_deg"])
+        metrics_physics["D_ang_full"] = float(metrics_physics["D_ang"])
+        metrics_physics["C_cov_full"] = float(metrics_physics["C_cov"])
+        metrics_physics["G_max_full_deg"] = math.degrees(float(metrics_physics["G_max"]))
 
-        if not self.captured and check_capture(
+        esc_cfg = escape_metrics_config_from_config(cfg)
+        esc = compute_escape_sector_metrics(
+            self.evader,
+            self.pursuers_physics,
+            self.obstacles,
+            self.bounds,
+            ray_length=esc_cfg["ray_length"],
+            num_angles=esc_cfg["num_angles"],
+            num_ray_samples=esc_cfg["num_ray_samples"],
+            pursuer_block_radius=esc_cfg["pursuer_block_radius"],
+            obstacle_margin=esc_cfg["obstacle_margin"],
+            boundary_margin=esc_cfg["boundary_margin"],
+            exit_config=esc_cfg["exit_config"],
+            min_forward_block_dist=esc_cfg["min_forward_block_dist"],
+        )
+        for key in (
+            "C_esc",
+            "G_esc_deg",
+            "free_escape_angle_deg",
+            "blocked_escape_angle_deg",
+            "unblocked_escape_angle_deg",
+            "exit_blockage",
+        ):
+            metrics_physics[key] = esc[key]
+
+        cap_params = capture_params_from_config(cfg)
+        cap_flags = evaluate_capture_conditions(
             self.pursuers_physics,
             self.evader,
-            fcem_cfg["capture_radius"],
+            cap_params["capture_radius"],
             metrics_physics["G_max"],
-            g_max_allowed,
-            trap_mode=trap.mode if trap else "open_space",
-            g_free=metrics_physics.get("G_free"),
-            g_free_allowed=g_f_allow,
-        ):
+            cap_params["g_max_allowed"],
+            esc,
+            g_esc_allow_deg=cap_params["g_esc_allow_deg"],
+            c_esc_min=cap_params["c_esc_min"],
+            capture_mode=cap_params["capture_mode"],
+        )
+        metrics_physics.update(
+            {
+                "capture_condition_valid_distance": cap_flags[
+                    "capture_condition_valid_distance"
+                ],
+                "capture_condition_valid_full_circle": cap_flags[
+                    "capture_condition_valid_full_circle"
+                ],
+                "capture_condition_valid_escape_sector": cap_flags[
+                    "capture_condition_valid_escape_sector"
+                ],
+            }
+        )
+
+        if not self.captured and cap_flags["captured"]:
             self.captured = True
             self.capture_step = step
 

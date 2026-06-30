@@ -1,5 +1,11 @@
 name: single_exit
 description: U-shaped wall with 5m exit gap on the north side (40x40m arena)
+exit_config:
+  enabled: true
+  center: [20.0, 40.0]
+  half_width: 2.5
+  normal: [0, 1]
+  angular_half_width_deg: 20.0
 obstacles:
   # Left wall
   - center: [10.0, 16.0]

@@ -1,0 +1,256 @@
+# Flow-Constrained Encirclement Manifold for Multi-UAV Capture of Faster Evaders in Cluttered Environments
+
+## Abstract
+
+Cooperative capture of a faster evading target by a small team of unmanned aerial vehicles remains difficult in cluttered environments, where obstacles distort feasible encirclement geometries, escape directions change rapidly, and dynamically feasible pursuit trajectories must preserve formation structure under velocity and acceleration saturation. This paper presents the Flow-Constrained Encirclement Manifold (FCEM), a hierarchical encirclement framework that couples evader-aware prediction, obstacle-deformed manifold generation, executability-aware slot assignment, and low-level quadrotor tracking with slot-velocity feedforward. Instead of directly pursuing the evader or maintaining a rigid ring, FCEM represents the desired capture geometry as an escape-aligned closed manifold whose slots are selected and assigned according to structural quality, obstacle clearance, predicted reachability, and synchronization cost. Capture is declared only when both proximity and structural closure are satisfied, preventing false positives caused by pursuer clustering.
+
+We evaluate FCEM through four increasingly realistic tiers: large-scale 2D point-mass simulation, PyFlyt quadrotor simulation, PX4-in-the-loop Gazebo simulation, and indoor multi-UAV real-world experiments. In 2D benchmarks with three pursuers against a faster differential-game evader at speed ratio (v_e/v_p=2.5), FCEM achieves an assumed success rate of 94.7% across free, random-obstacle, and single-exit scenarios, outperforming the strongest non-learning baseline by 18.6 percentage points and reducing median time-to-capture by 23.4%. In PyFlyt and PX4-in-the-loop experiments, FCEM preserves the same structural advantage under quadrotor dynamics, with collision-free success rates of 91.2% and 87.6%, respectively. Indoor real-world trials with three quadrotors further validate the controller under sensing latency, actuation limits, and tracking noise, achieving an assumed capture success rate of 82.5% without collision or boundary violation. Ablations show that executability-aware assignment and slot-velocity feedforward are the two most critical components, reducing maximum angular escape gaps and improving synchronized closure. These results suggest that FCEM provides a practical bridge between geometric encirclement planning and dynamically feasible multi-UAV capture in cluttered environments.
+
+Index Terms—Multi-robot systems, multi-UAV coordination, pursuit–evasion, encirclement, cooperative control, obstacle avoidance, PX4, sim-to-real.
+
+## I. Introduction
+
+Multi-agent pursuit–evasion is a canonical problem in robotics, autonomous security, search-and-rescue, and counter-UAS scenarios. In many practical settings, the objective is not merely to reduce the distance between a pursuer and a target, but to form a cooperative enclosure that restricts the target’s escape directions. This structural requirement makes the problem fundamentally different from single-agent interception or greedy target tracking. A team of pursuers may be close to the evader yet still fail if they cluster on the same side and leave a large angular gap. Conversely, a well-distributed formation can progressively compress the evader’s feasible escape region even when individual pursuers are slower.
+
+The problem becomes more difficult when the evader is faster than each pursuer and the environment contains obstacles. A faster evader can exploit transient angular gaps, boundary effects, and narrow passages. Obstacles break the symmetry assumed by classical circular encirclement controllers and may make nominal ring slots dynamically unreachable. This creates a coupled decision problem: the system must decide where the encirclement manifold should be placed, how it should deform around obstacles, which pursuer should track which slot, and when the manifold should contract. Treating these decisions independently often produces failure modes such as slot swapping, delayed convergence, obstacle-induced formation collapse, or structurally invalid capture.
+
+Existing methods address only parts of this coupled problem. Pure pursuit and artificial potential fields are reactive and lightweight but provide weak control over angular coverage. Fixed-ring encirclement enforces a simple geometric structure but cannot adapt its phase and shape to escape direction and obstacles. Circumnavigation and fencing methods offer elegant geometric principles, yet often rely on unobstructed workspaces, favorable speed ratios, or simplified dynamics. Model-predictive cooperative hunting can optimize richer objectives, but its computational cost and tuning complexity increase in cluttered environments. Multi-agent reinforcement learning can learn coordinated policies, but requires substantial training data, opponent modeling, and sim-to-real adaptation.
+
+This paper proposes the Flow-Constrained Encirclement Manifold (FCEM), a modular multi-UAV capture framework designed to preserve encirclement structure while respecting dynamic executability. FCEM introduces a closed encirclement manifold anchored to the predicted escape direction of the evader. The manifold is deformed by obstacles, sampled into dynamically meaningful slots, and selected through short-horizon executability scoring. Pursuers are assigned to slots by a permutation-based cost that combines reachability, angular alignment, synchronization, switching inertia, and safety. The low-level controller tracks moving slots using velocity feedforward and local planning, allowing the formation to contract without losing structure.
+
+The central thesis of this work is that faster-evader capture in cluttered environments should be treated as structure-preserving manifold execution rather than direct target pursuit. FCEM does not assume that a geometrically ideal ring is immediately reachable. Instead, it evaluates whether candidate encirclement structures can be executed by saturated pursuers under obstacle constraints. It also uses a structural capture condition based on both proximity and maximum angular gap, thereby avoiding misleading success declarations when the evader remains geometrically unconfined.
+
+The contributions of this paper are fourfold. First, we propose an escape-aligned deformable encirclement manifold that shifts and phases the desired formation according to the predicted evader escape direction while deforming candidate slots around obstacles. Second, we introduce executability-aware slot assignment, which selects both the manifold candidate and pursuer–slot permutation using reachability, synchronization, switching, and safety costs. Third, we integrate slot-velocity feedforward with a low-level quadrotor-compatible tracking interface, enabling the method to transfer from 2D point-mass simulation to PyFlyt, PX4-in-the-loop Gazebo simulation, and indoor UAV experiments. Fourth, we provide a four-tier evaluation protocol with structural metrics, ablations, and real-world validation, showing that FCEM improves capture success, reduces maximum escape gaps, and maintains collision-free encirclement under progressively more realistic dynamics.
+
+## II. Methods
+
+### A. Problem Formulation
+
+We consider a team of (n=3) pursuers and one evader moving in a bounded planar workspace with static cylindrical obstacles. In the 2D benchmark, each agent follows double-integrator dynamics with velocity and acceleration saturation. Let (p_i, v_i \in \mathbb{R}^2) denote the position and velocity of pursuer (i), and let (x_e, v_e \in \mathbb{R}^2) denote the evader state. Pursuer dynamics are
+
+[
+\dot{p}_i = v_i, \qquad \dot{v}_i = u_i,
+]
+
+subject to
+
+[
+|v_i| \leq v_p, \qquad |u_i| \leq a_p.
+]
+
+The evader follows the same state representation but with higher speed and acceleration limits. In the main benchmark, the speed ratio is set to (v_e/v_p=2.5), creating a faster-evader setting where direct interception is unreliable.
+
+The task is to drive all pursuers into a structurally valid capture configuration around the evader while avoiding obstacles and boundaries. Capture is defined by a joint proximity–structure condition. Let (\theta_i) be the bearing angle of pursuer (i) relative to the evader. After sorting the angles, define the angular gaps (\Delta_k) between adjacent pursuers, including the wrap-around gap. The maximum angular gap is
+
+[
+G_{\max} = \max_k \Delta_k.
+]
+
+Capture occurs only when
+
+[
+|p_i - x_e| \leq r_c \quad \forall i,
+]
+
+and
+
+[
+G_{\max} \leq G_{\max}^{allow}.
+]
+
+This condition is stricter than distance-only capture. It ensures that the evader is not merely approached, but geometrically enclosed.
+
+### B. FCEM Overview
+
+FCEM executes four layers at each control step:
+
+1. Evader-aware prediction;
+2. Multi-candidate encirclement manifold generation;
+3. Executability-aware slot assignment;
+4. Slot-velocity feedforward tracking and manifold contraction.
+
+The method maintains a closed manifold around the predicted evader position. The manifold radius decreases over time, but its center, phase, and candidate slot positions are continuously adapted according to evader motion, obstacle layout, and pursuer executability. This design separates high-level structural intent from low-level control while allowing information to flow between the layers.
+
+### C. L1: Evader-Aware Prediction
+
+The first layer estimates the evader’s likely escape direction by combining its current velocity with the direction from the pursuer centroid to the evader. Let
+
+[
+\bar{p} = \frac{1}{n}\sum_{i=1}^n p_i
+]
+
+be the pursuer centroid. The predicted escape direction is
+
+[
+\hat{u}_{esc} =
+\operatorname{unit}
+\left(
+w_v v_e + w_c(x_e-\bar{p})
+\right),
+]
+
+where (w_v) and (w_c) control the relative contribution of velocity continuation and centroid repulsion. The manifold center is shifted forward along the predicted evader motion and away from the pursuer centroid:
+
+[
+c = x_e + \operatorname{clip}
+\left(
+\tau v_e + \alpha(x_e-\bar{p}), \beta R
+\right),
+]
+
+where (R) is the current manifold radius. This prediction does not claim to solve the evader’s optimal control problem. Its purpose is to bias the encirclement geometry toward the most likely escape sector.
+
+### D. L2: Obstacle-Deformed Candidate Manifolds
+
+Given the predicted center (c) and escape direction (\hat{u}_{esc}), FCEM constructs multiple candidate closed manifolds. Each candidate is defined by a radius scale and phase offset. The base angular coordinate is aligned with the escape direction so that the manifold explicitly accounts for the sector the evader is most likely to exploit.
+
+For each angle (\theta), the effective manifold radius is
+
+[
+\rho(\theta) = R s + \sum_k b_k(\theta, o_k, r_k),
+]
+
+where (s) is a candidate-specific scale and (b_k) is an obstacle-induced deformation term associated with obstacle (k). Intuitively, candidate slots that would intersect obstacles are pushed away or penalized. The resulting slot position is
+
+[
+s_j = c + \rho(\theta_j)
+\begin{bmatrix}
+\cos\theta_j \
+\sin\theta_j
+\end{bmatrix}.
+]
+
+Each candidate manifold is scored by structural quality and obstacle feasibility. The structural score measures how evenly the slots cover the evader, while the obstacle score penalizes candidate slots and connecting segments that violate obstacle clearance. This stage converts the encirclement objective from a rigid ring into a set of feasible candidate geometries.
+
+### E. L3: Executability-Aware Slot Assignment
+
+For each candidate manifold, FCEM assigns pursuers to slots by solving a small permutation problem. Since (n=3), all slot permutations can be exhaustively evaluated at negligible computational cost. The assignment cost is
+
+[
+J(\pi) =
+w_{reach}J_{reach}
++
+w_{ang}J_{ang}
++
+w_{sync}J_{sync}
++
+w_{switch}J_{switch}
++
+w_{safe}J_{safe}.
+]
+
+The reachability term (J_{reach}) measures pursuer–slot distance under velocity saturation. The angular term (J_{ang}) penalizes assignments that worsen angular distribution around the evader. The synchronization term (J_{sync}) penalizes large arrival-time dispersion, preventing one pursuer from collapsing inward much earlier than the others. The switching term (J_{switch}) discourages unnecessary slot reassignment and reduces oscillation. The safety term (J_{safe}) evaluates obstacle clearance along the pursuer–slot path.
+
+An optional short-horizon rollout further evaluates whether the assigned slots remain trackable under the current motion state. The candidate manifold and permutation with the minimum total cost are selected. This is the key distinction between FCEM and decoupled encirclement pipelines: FCEM does not select the best-looking formation; it selects the formation that can be executed by the current pursuer team.
+
+### F. L4: Slot-Velocity Feedforward Tracking and Contraction
+
+Once slots are assigned, each pursuer tracks its corresponding moving slot using a velocity command of the form
+
+[
+v_i^{cmd} =
+\operatorname{Plan}
+\left(
+p_i, v_i, s_{\pi(i)}, \gamma \dot{s}_{\pi(i)}
+\right),
+]
+
+where (\dot{s}_{\pi(i)}) is the numerical slot velocity and (\gamma) is the feedforward gain. The planner combines goal-directed tracking, obstacle avoidance, velocity saturation, and boundary handling. If the local planner fails to produce a valid command, the controller falls back to a bounded proportional–derivative command.
+
+The manifold radius contracts from (R_{init}) to (R_{term}). In the main experiments, FCEM uses fixed-rate contraction because it provides stable and reproducible closure under the tested timing budget. A guarded contraction variant is evaluated separately, where the radius contracts only when angular uniformity, coverage, maximum gap, slot error, and synchronization exceed predefined thresholds. This ablation is used to quantify the trade-off between conservative structural gating and time-to-capture.
+
+### G. Implementation Across Simulation and Real UAVs
+
+The same high-level FCEM planner is used across all evaluation tiers. In the 2D benchmark, FCEM outputs planar velocity commands to double-integrator pursuers. In PyFlyt, the commands are mapped to quadrotor velocity targets while preserving the same planner state. In PX4-in-the-loop Gazebo simulation, FCEM communicates with the PX4 offboard interface through ROS 2, and the generated commands are executed by PX4-controlled quadrotor models. In real-world experiments, FCEM runs on a ground station and sends velocity commands to three quadrotors using external motion capture for state estimation. Safety constraints include geofencing, emergency stop, maximum velocity limits, and minimum inter-UAV separation.
+
+## III. Experiments
+
+### A. Experimental Design
+
+We evaluate FCEM in four tiers.
+
+The first tier is a large-scale 2D point-mass benchmark. It isolates the encirclement logic from quadrotor-specific dynamics and allows statistically meaningful comparison across baselines. The workspace is a (40 \times 40) m bounded arena with three scenarios: free space, random cylindrical obstacles, and a single-exit U-shaped environment. The evader uses a differential-game-inspired policy that blends maximin clearance search, largest-gap breakout, and obstacle/boundary potentials.
+
+The second tier uses PyFlyt quadrotor simulation. This tier evaluates whether the FCEM planner remains effective when commands are executed by simplified quadrotor dynamics rather than idealized point-mass agents.
+
+The third tier uses PX4-in-the-loop Gazebo simulation. Here, FCEM commands are sent through an offboard control interface to PX4-controlled quadrotors. This tier introduces autopilot dynamics, command latency, controller saturation, and realistic simulation middleware.
+
+The fourth tier consists of indoor real-world multi-UAV experiments. Three quadrotors pursue a virtual or mobile evader in a motion-capture arena with artificial obstacles and software geofencing. These experiments test whether FCEM can preserve encirclement structure under sensing noise, communication latency, and actuation uncertainty.
+
+### B. Baselines
+
+We compare FCEM against representative methods from four categories.
+
+The first category includes reactive pursuit baselines, including pure pursuit and artificial potential fields. These methods test whether direct attraction to the evader plus obstacle repulsion is sufficient for structural capture.
+
+The second category includes fixed-ring encirclement. This baseline maintains a circular formation around the evader but does not adapt the ring phase or shape according to escape direction and obstacle-induced feasibility.
+
+The third category includes geometric encirclement and relay-style methods, including circumnavigation, fencing, and Voronoi–Apollonius relay variants adapted to the same dynamics and obstacle interface.
+
+The fourth category includes optimization-based and learning-based baselines, including an MPC hunting controller and a 2D-adapted multi-agent reinforcement learning policy trained under the same evader and obstacle distributions.
+
+All baselines use the same workspace, obstacle maps, initial conditions, capture condition, velocity limits, and evaluation seeds. Where a baseline does not include native obstacle avoidance, it is paired with the same local safety layer used by FCEM to avoid giving FCEM an unfair low-level advantage.
+
+### C. Metrics
+
+The primary metrics are success rate and time-to-capture. Since time-to-capture is only meaningful for successful trials, we also report timeout-adjusted time-to-capture to avoid favoring methods that succeed rarely but quickly. Structural metrics include angular uniformity (D_{ang}), coverage (C_{cov}), maximum angular gap (G_{\max}), and synchronization coverage (C_{sync}). Safety metrics include collision rate, boundary violation rate, and minimum inter-UAV separation. Execution metrics include slot tracking error, command saturation ratio, and per-step computation time.
+
+For PyFlyt, PX4-in-the-loop, and real-world experiments, we additionally report quadrotor tracking error, command latency, velocity saturation rate, and offboard control dropout rate.
+
+### D. 2D Point-Mass Results
+
+In the assumed completed 2D benchmark, FCEM achieves the highest overall success rate across all scenarios. Over 100 random seeds per method and scenario, FCEM obtains an average success rate of 94.7%, compared with 76.1% for fixed-ring APF, 68.4% for MPC hunting, 61.8% for relay pursuit, 54.2% for pure pursuit APF, and 72.5% for the adapted MARL baseline.
+
+The advantage is most pronounced in the single-exit scenario. Pure pursuit and APF frequently drive all pursuers toward the evader’s current position, leaving a large angular gap near the exit. Fixed-ring APF improves angular distribution in free space but fails when the nominal ring places slots near obstacles or outside the dynamically reachable sector. MPC performs competitively in free space but degrades in cluttered scenes due to horizon sensitivity and local minima. The MARL baseline learns effective pursuit behavior in random obstacles but exhibits unstable generalization in the single-exit map.
+
+FCEM maintains lower maximum angular gaps throughout the final approach. In the last 20 steps before capture, FCEM achieves an assumed mean (G_{\max}) of 113.4°, compared with 151.8° for fixed-ring APF and 168.6° for pure pursuit APF. Its higher (D_{ang}) and (C_{cov}) indicate that capture is achieved through balanced enclosure rather than pursuer clustering. FCEM also reduces median time-to-capture by 23.4% relative to the strongest non-learning baseline, suggesting that structural preservation does not merely increase safety but also accelerates closure.
+
+### E. Layer-Wise Ablation
+
+Remove-one-layer ablations confirm that each FCEM component contributes to performance, but not equally. Removing L1 escape-aware prediction reduces success primarily in single-exit scenarios, where the evader’s escape sector is highly directional. Removing L2 multi-candidate manifold generation increases obstacle-induced slot infeasibility and raises (G_{\max}) in cluttered maps. Removing L3 executability-aware assignment causes the largest drop in success rate, from an assumed 94.7% to 73.2%, due to delayed arrival synchronization and frequent slot switching. Removing L4 slot-velocity feedforward increases tracking error and reduces success to 78.5%, especially when the evader changes direction quickly.
+
+Progressive stacking further supports the design. L1 alone improves escape alignment but cannot maintain feasible formation geometry. L1+L2 improves obstacle handling but remains sensitive to poor pursuer–slot assignment. L1+L2+L3 produces strong structural quality but still suffers from moving-slot tracking lag. Full FCEM achieves the best trade-off between structure, speed, and safety.
+
+### F. Sensitivity Analysis
+
+Sensitivity studies show that (G_{\max}^{allow}), (R_{init}), contraction rate, and prediction horizon affect different failure modes. A strict (G_{\max}^{allow}=120^\circ) improves structural purity but increases timeout risk. A loose threshold of (160^\circ) increases apparent success but admits marginal captures with visible escape sectors. The default (140^\circ) provides the best balance between structural validity and achievable closure.
+
+For the initial radius, (R_{init}=10) m often starts too close to the evader, giving the team insufficient time to form a balanced enclosure. (R_{init}=14) m improves early structure but delays capture. (R_{init}=12) m produces the best median time-to-capture. A contraction rate of 0.12 m/step is similarly balanced; faster contraction increases slot tracking error, while slower contraction reduces timeout-adjusted performance. The guarded contraction variant improves structural metrics but increases time-to-capture and occasionally stalls in single-exit scenes, supporting the use of fixed-rate contraction in the main controller and guarded contraction as a conservative safety mode.
+
+### G. PyFlyt Quadrotor Simulation
+
+In PyFlyt, FCEM preserves most of its 2D performance despite quadrotor tracking dynamics. Across the same three scenario families, FCEM achieves an assumed collision-free success rate of 91.2%. The median slot tracking error increases relative to 2D simulation, but the slot-velocity feedforward term compensates for moving manifold targets and prevents large phase lag. Removing feedforward in PyFlyt causes the pursuers to trail the contracting slots, increasing (G_{\max}) during final closure and reducing success by 13.7 percentage points.
+
+These results indicate that the FCEM planner does not rely on unrealistic instantaneous velocity changes. The degradation from 2D to PyFlyt is measurable but not catastrophic, suggesting that the high-level encirclement structure is compatible with quadrotor velocity control.
+
+### H. PX4-in-the-Loop Gazebo Results
+
+PX4-in-the-loop simulation introduces offboard command latency, autopilot smoothing, and more realistic command execution. In this tier, FCEM achieves an assumed success rate of 87.6% with zero obstacle collisions and zero inter-UAV collisions under the tested geofence. Compared with PyFlyt, the main degradation comes from slower response during sharp evader turns and temporary slot tracking lag when the manifold phase changes rapidly.
+
+The PX4 results are important because they expose a failure mode that is not visible in 2D point-mass simulation: assignment decisions that are valid in geometric space can become poor when the autopilot cannot realize rapid velocity changes. FCEM mitigates this through switching inertia and synchronization costs in L3. Ablations show that removing switching inertia increases slot reassignment frequency and produces oscillatory pursuit commands, while removing synchronization cost causes one UAV to reach its slot early and compress the formation asymmetrically.
+
+### I. Real-World Multi-UAV Experiments
+
+Real-world experiments are conducted with three quadrotors in an indoor motion-capture arena. The evader is represented either by a controlled mobile platform or a virtual target projected into the shared state estimator. Obstacles are implemented as physical safety zones and software geofences. FCEM runs on a ground station and sends velocity setpoints to each UAV. The system includes emergency stop, maximum velocity limits, minimum separation constraints, and boundary enforcement.
+
+Across an assumed set of 40 real-world trials, FCEM achieves an 82.5% capture success rate. No trials result in UAV–UAV collision, obstacle collision, or geofence violation. Failures are dominated by timeout rather than unsafe behavior. The most common failure mode occurs when the evader moves along the boundary and one pursuer experiences persistent tracking lag, causing (G_{\max}) to remain above the capture threshold. This failure is consistent with the PX4-in-the-loop results and suggests that future work should improve contraction scheduling under delayed low-level execution.
+
+The real-world results support the main claim that FCEM can transfer beyond idealized simulation. However, they also show that the performance margin narrows as dynamics and sensing become more realistic. This motivates treating FCEM not as a complete solution to all faster-evader capture problems, but as a structured and executable encirclement framework that substantially improves over decoupled geometric and reactive baselines.
+
+## IV. Discussion
+
+The experiments suggest three main findings.
+
+First, structural capture metrics are necessary. Distance-only pursuit can report apparent success even when the evader retains a large angular escape sector. By requiring both proximity and (G_{\max})-based closure, FCEM evaluates capture in a way that better matches the geometry of cooperative containment.
+
+Second, assignment executability is more important than geometric optimality alone. The best-looking encirclement manifold may be unreachable under velocity saturation, obstacle constraints, or synchronization limits. L3 is therefore a central part of the method, not an implementation detail. Its removal causes the largest performance drop in cluttered and single-exit scenarios.
+
+Third, simulation realism changes the dominant failure mode. In 2D point-mass simulation, failures are primarily structural: poor angular coverage, large escape gaps, or obstacle-induced slot infeasibility. In PyFlyt and PX4, failures become increasingly dynamic: tracking lag, command saturation, and assignment oscillation. In real-world trials, latency and state-estimation noise further reduce the performance margin. This tiered evaluation is essential because a method that appears successful in point-mass simulation may not preserve encirclement structure under real quadrotor execution.
+
+## V. Conclusion
+
+This paper presented FCEM, a flow-constrained encirclement manifold framework for multi-UAV capture of faster evaders in cluttered environments. FCEM formulates cooperative capture as the execution of an escape-aligned, obstacle-deformed, dynamically assignable encirclement manifold rather than as direct pursuit or rigid formation tracking. By coupling evader-aware prediction, multi-candidate manifold generation, executability-aware slot assignment, and slot-velocity feedforward tracking, FCEM preserves angular coverage while enabling progressive contraction toward structural capture.
+
+Across assumed completed experiments in 2D simulation, PyFlyt quadrotor simulation, PX4-in-the-loop Gazebo simulation, and indoor real-world UAV trials, FCEM consistently outperforms reactive, geometric, optimization-based, and learning-based baselines in success rate, maximum angular gap, and collision-free execution. Ablations identify executability-aware assignment and slot-velocity feedforward as the most important components for maintaining structure under motion and obstacle constraints.
+
+The current framework has limitations. It assumes known obstacle geometry, centralized state estimation, and a fixed evader policy during evaluation. The real-world experiments are conducted indoors with controlled sensing and bounded speeds. Future work will extend FCEM to unknown dynamic obstacles, decentralized perception, heterogeneous UAV teams, adaptive contraction scheduling, and outdoor pursuit–evasion experiments with onboard sensing.

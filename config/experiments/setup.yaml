@@ -2,7 +2,7 @@
 name: setup
 section: experimental_setup
 
-# Shared dynamics for the full experiment suite (v_e / v_p = 2.5)
+# Shared dynamics for the full experiment suite (v_e / v_p = 2.0, game evader)
 dynamics_file: dynamics/evader_faster.yaml
 
 environments:
@@ -24,14 +24,9 @@ environments:
 baselines:
   - fcem
   - pure_pursuit
-  - fixed_ring
-  - deghat_circumnavigation
-  - kou_xiang_fencing
-  - fang_relay_2022
-  - relay_pursuit
   - liao_mpc
-  - yu_consensus
   - open_marl
+  - ac_baseline
 
 scenarios:
   - free

@@ -2,7 +2,13 @@
 
 from __future__ import annotations
 
-from metrics.pre_capture import pre_capture_step_window, pre_capture_structure_metrics
+from metrics.pre_capture import (
+    capture_structure_metrics,
+    capture_window_metrics,
+    pre_capture_labeled_metrics,
+    pre_capture_step_window,
+    pre_capture_structure_metrics,
+)
 
 
 def _step(step_id: int, d: float, c: float, g_deg: float, sync: float) -> dict:
@@ -42,3 +48,58 @@ def test_pre_capture_empty_when_not_captured():
     steps = [_step(0, 0.5, 0.5, 90.0, 0.5)]
     m = pre_capture_structure_metrics(steps, capture_step=None, captured=False, k=10)
     assert m["pre_capture_D_ang"] == ""
+
+
+def test_escape_sector_nan_when_not_captured():
+    from metrics.escape_sector_pre_capture import escape_sector_window_metrics
+
+    steps = [
+        {
+            "step": 0,
+            "metrics": {
+                "C_esc": 0.2,
+                "G_esc_deg": 45.0,
+                "free_escape_angle_deg": 180.0,
+                "blocked_escape_angle_deg": 30.0,
+                "unblocked_escape_angle_deg": 150.0,
+                "D_ang_full": 0.5,
+                "C_cov_full": 0.6,
+                "G_max_full_deg": 100.0,
+            },
+        }
+    ]
+    m = escape_sector_window_metrics(steps, capture_step=None, captured=False)
+    import math
+
+    assert math.isnan(m["C_esc_at_capture"])
+    assert math.isnan(m["G_esc_at_capture_deg"])
+    assert math.isnan(m["D_ang_full_at_capture"])
+
+
+def test_capture_at_step_metrics():
+    steps = [
+        _step(0, 0.2, 0.3, 100.0, 0.4),
+        _step(1, 0.4, 0.5, 110.0, 0.6),
+        _step(2, 0.6, 0.7, 120.0, 0.8),
+        _step(3, 0.8, 0.9, 130.0, 1.0),
+    ]
+    m = capture_structure_metrics(steps, capture_step=3, captured=True)
+    assert abs(m["capture_D_ang"] - 0.8) < 1e-9
+    assert abs(m["capture_C_cov"] - 0.9) < 1e-9
+    assert abs(m["capture_G_max_deg"] - 130.0) < 1e-9
+
+
+def test_pre_capture_labeled_final_k():
+    steps = [
+        _step(0, 0.2, 0.3, 100.0, 0.4),
+        _step(1, 0.4, 0.5, 110.0, 0.6),
+        _step(2, 0.6, 0.7, 120.0, 0.8),
+        _step(3, 0.8, 0.9, 130.0, 1.0),
+    ]
+    m5 = pre_capture_labeled_metrics(steps, capture_step=3, captured=True, k=5, label="pre_capture_5")
+    assert m5["pre_capture_5_n_steps"] == 4
+    assert abs(m5["pre_capture_5_D_ang"] - 0.5) < 1e-9
+
+    m10 = capture_window_metrics(steps, capture_step=3, captured=True)
+    assert "capture_D_ang" in m10
+    assert "pre_capture_10_D_ang" in m10

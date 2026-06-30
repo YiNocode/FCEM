@@ -1,0 +1,25 @@
+_base: setup.yaml
+name: speed_pressure
+section: speed_pressure
+description: >
+  Capture-rate vs evader speed ratio (v_e/v_p sweep, differential-game evader).
+  Stresses methods beyond the main comparison point (v_e/v_p=2.0).
+
+output_subdir: speed_pressure
+
+dynamics_file: dynamics/evader_faster.yaml
+
+# Fixed pursuer; sweep evader_vmax = pursuer_vmax * ratio.
+# Scale evader_amax with vmax so agility stays comparable across ratios.
+pursuer_vmax: 4.0
+scale_evader_amax: true
+speed_ratios: [1.0, 1.5, 2.0, 2.5, 3.0]
+
+methods:
+  - fcem
+  - pure_pursuit
+  - liao_mpc
+  - ac_baseline
+
+scenarios:
+  - free

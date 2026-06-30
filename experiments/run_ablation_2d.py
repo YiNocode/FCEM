@@ -17,7 +17,7 @@ from experiments.config_loader import (
     format_dynamics_line,
     load_experiment_config,
 )
-from experiments.runner_args import add_dynamics_args, dynamics_overrides_from_args
+from experiments.runner_args import add_dynamics_args, add_run_output_args, dynamics_overrides_from_args, run_output_kwargs_from_args
 from experiments.runner_common import run_fcem_trial
 
 
@@ -31,13 +31,19 @@ def main() -> None:
         default=str(CONFIG_DIR / "experiments" / "ablation_components.yaml"),
     )
     add_dynamics_args(parser)
+    add_run_output_args(parser)
     args = parser.parse_args()
 
     exp_cfg = load_experiment_config(Path(args.config))
-    base = build_experiment_base_config(exp_cfg, dynamics_overrides_from_args(args))
+    base = build_experiment_base_config(
+        exp_cfg,
+        dynamics_overrides_from_args(args),
+        **run_output_kwargs_from_args(args),
+    )
     n_trials = args.trials if args.trials is not None else base["n_trials"]
     scenarios = args.scenarios or exp_cfg.get("scenarios", [])
     print(format_dynamics_line(base))
+    print(f"Output: {base.get('output_dir')}")
 
     for variant in exp_cfg["variants"]:
         name = variant["name"]

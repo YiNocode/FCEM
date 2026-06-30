@@ -1,7 +1,7 @@
 _base: comparison.yaml
 name: evader_faster_comparison
 section: comparative_evaluation
-description: Evader speed advantage (v_e/v_p = 2.5 via dynamics/evader_faster.yaml)
+description: Evader speed advantage (v_e/v_p = 2.0 via dynamics/evader_faster.yaml)
 
 output_subdir: comparison_evader_faster
 
@@ -10,7 +10,8 @@ dynamics_file: dynamics/evader_faster.yaml
 methods:
   - fcem
   - pure_pursuit
-  - fixed_ring
+  - liao_mpc
+  - ac_baseline
 
 scenarios:
   - free

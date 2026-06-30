@@ -7,7 +7,12 @@ import pytest
 
 from fcem.slot_assignment import AssignmentWeights, assign_slots, assignment_cost_jij
 from metrics.structure import contraction_gate
-from metrics.sync import estimate_arrival_times, sync_coverage
+from metrics.sync import (
+    estimate_arrival_times,
+    ordered_coverage_cost,
+    sector_violation_cost,
+    sync_coverage,
+)
 
 
 def test_equal_distance_speed_gives_c_sync_near_one() -> None:
@@ -143,4 +148,82 @@ def test_assignment_cost_jij_reports_components() -> None:
     assert "J_reach" in components
     assert "J_sync" in components
     assert "C_sync" in components
+    assert "J_cov" in components
+    assert "J_sector" in components
     assert components["J_sync"] == pytest.approx(1.0 - components["C_sync"])
+
+
+def test_ordered_coverage_prefers_spread_assignment() -> None:
+    target = np.array([0.0, 0.0])
+    pursuers = np.array(
+        [
+            [1.0, 0.0],
+            [0.95, 0.2],
+            [-1.0, 0.0],
+        ]
+    )
+    slots = np.array(
+        [
+            [1.0, 0.0],
+            [0.0, 1.0],
+            [-1.0, 0.0],
+        ]
+    )
+    good = (0, 1, 2)
+    bad = (0, 2, 1)
+
+    j_good, c_good = ordered_coverage_cost(pursuers, slots, good, target)
+    j_bad, c_bad = ordered_coverage_cost(pursuers, slots, bad, target)
+
+    assert c_good > c_bad
+    assert j_good < j_bad
+
+
+def test_sector_violation_penalizes_wrong_side_assignment() -> None:
+    target = np.array([0.0, 0.0])
+    pursuer_same_side = np.array([1.0, 0.0])
+    slot_opposite = np.array([-1.0, 0.0])
+    slot_same = np.array([1.0, 0.1])
+
+    wrong = sector_violation_cost(pursuer_same_side, slot_opposite, target, n=3)
+    right = sector_violation_cost(pursuer_same_side, slot_same, target, n=3)
+
+    assert wrong > right
+    assert right == pytest.approx(0.0, abs=1e-9)
+
+
+def test_assign_slots_weights_cov_and_sector() -> None:
+    target = np.array([0.0, 0.0])
+    pursuers = np.array(
+        [
+            [1.0, 0.0],
+            [0.9, 0.2],
+            [-1.0, 0.0],
+        ]
+    )
+    slots = np.array(
+        [
+            [1.0, 0.0],
+            [0.0, 1.0],
+            [-1.0, 0.0],
+        ]
+    )
+    weights = AssignmentWeights(
+        w_reach=0.0,
+        w_ang=0.0,
+        w_cov=1.0,
+        w_sector=1.0,
+        w_sync=0.0,
+        w_switch=0.0,
+        w_safe=0.0,
+    )
+
+    assignment, _, components = assign_slots(
+        pursuers,
+        slots,
+        target=target,
+        weights=weights,
+    )
+
+    assert assignment == (0, 1, 2)
+    assert components["J_cov"] + components["C_cov_ordered"] == pytest.approx(1.0)

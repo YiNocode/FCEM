@@ -5,12 +5,27 @@ from __future__ import annotations
 import numpy as np
 
 
+def angular_gaps_rad(bearings: np.ndarray) -> np.ndarray:
+    """Return sorted full-circle angular gaps, including the wraparound gap."""
+    angles = np.sort(np.asarray(bearings, dtype=float) % (2.0 * np.pi))
+    if angles.size == 0:
+        return np.array([], dtype=float)
+    return np.diff(np.r_[angles, angles[0] + 2.0 * np.pi])
+
+
+def max_angular_gap_rad(bearings: np.ndarray) -> float:
+    gaps = angular_gaps_rad(bearings)
+    if gaps.size == 0:
+        return 0.0
+    return float(np.max(gaps))
+
+
 def structural_metrics_from_positions(
     target: np.ndarray, pursuers: np.ndarray
 ) -> dict[str, float]:
     rel = pursuers - target
-    angles = np.sort(np.arctan2(rel[:, 1], rel[:, 0]) % (2.0 * np.pi))
-    gaps = np.diff(np.r_[angles, angles[0] + 2.0 * np.pi])
+    angles = np.arctan2(rel[:, 1], rel[:, 0])
+    gaps = angular_gaps_rad(angles)
     ideal_gap = 2.0 * np.pi / len(pursuers)
 
     D_ang = 1.0 - np.mean(np.abs(gaps - ideal_gap)) / ideal_gap
@@ -29,6 +44,53 @@ def structural_metrics_from_positions(
         "G_max": G_max,
         "C_col": C_col,
     }
+
+
+def contraction_allowed(
+    metrics: dict[str, float],
+    fcem_cfg: dict,
+    config: dict,
+    R: float,
+    formation_expanded_latched: bool,
+) -> tuple[bool, dict[str, float | bool | str], bool]:
+    """Boolean contraction latch used by the high-level radius controller.
+
+    The latch separates the "formation has opened enough to start closure" check
+    from the stricter capture-time angular-gap condition. This lets FCEM begin
+    contraction after coverage is established without requiring final closure yet.
+    """
+    c_expand_min = float(fcem_cfg.get("C_expand_min", 0.25))
+    min_R_for_closure = float(fcem_cfg.get("min_R_for_closure", 0.0))
+    g_capture_allowed = np.deg2rad(float(config.get("G_max_allowed_deg", 140.0)))
+    g_contract_threshold = np.deg2rad(
+        float(config.get("G_contract_threshold_deg", np.rad2deg(g_capture_allowed)))
+    )
+
+    c_cov = float(metrics.get("C_cov", 0.0))
+    g_max = float(metrics.get("G_max", np.inf))
+    expanded_now = c_cov >= c_expand_min
+    latched = bool(formation_expanded_latched or expanded_now)
+    g_capture_ok = bool(g_max <= g_capture_allowed)
+    g_contract_ok = bool(g_max <= g_contract_threshold)
+
+    parts: dict[str, float | bool | str] = {
+        "formation_expanded": latched,
+        "expanded_now": expanded_now,
+        "C_expand_min": c_expand_min,
+        "g_capture_ok": g_capture_ok,
+        "g_contract_ok": g_contract_ok,
+        "G_capture_allowed": float(g_capture_allowed),
+        "G_contract_threshold": float(g_contract_threshold),
+        "R": float(R),
+        "min_R_for_closure": min_R_for_closure,
+    }
+
+    if not latched:
+        parts["block_reason"] = "not_expanded"
+        return False, parts, latched
+
+    parts["block_reason"] = ""
+    return True, parts, latched
 
 
 def contraction_gate(

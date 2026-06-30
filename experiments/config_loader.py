@@ -9,6 +9,7 @@ import numpy as np
 import yaml
 
 from common.obstacles import Obstacle
+from experiments.run_output import aggregate_section_name, make_run_dir, write_run_manifest
 
 ROOT = Path(__file__).resolve().parent.parent
 CONFIG_DIR = ROOT / "config"
@@ -90,6 +91,11 @@ def dynamics_cli_overrides(
 def build_experiment_base_config(
     exp_cfg: dict[str, Any],
     cli_overrides: dict[str, Any] | None = None,
+    *,
+    run_dir: str | Path | None = None,
+    timestamped: bool = True,
+    write_manifest: bool = True,
+    config_path: str | None = None,
 ) -> dict[str, Any]:
     """Load default config + experiment dynamics_file/dynamics + CLI overrides."""
     base = load_config()
@@ -103,8 +109,41 @@ def build_experiment_base_config(
     if cli_overrides:
         dynamics = deep_merge(dynamics, cli_overrides)
     base = deep_merge(base, dynamics)
-    if "output_subdir" in exp_cfg:
-        base["output_dir"] = str(Path(base.get("output_dir", "results")) / exp_cfg["output_subdir"])
+
+    exp_name = str(exp_cfg.get("name") or exp_cfg.get("output_subdir") or "experiment")
+    results_root = Path(base.get("output_dir", "results"))
+    legacy = not timestamped and run_dir is None
+    legacy_subdir = str(exp_cfg["output_subdir"]) if legacy and "output_subdir" in exp_cfg else None
+
+    output_path = make_run_dir(
+        results_root,
+        exp_name,
+        run_dir=Path(run_dir) if run_dir else None,
+        timestamped=timestamped and run_dir is None,
+        legacy_subdir=legacy_subdir,
+    )
+    base["output_dir"] = str(output_path)
+    base["experiment_name"] = exp_name
+    base["experiment_section"] = aggregate_section_name(exp_cfg)
+
+    manifest_path = output_path / "run_manifest.json"
+    if write_manifest and not manifest_path.exists():
+        vp = float(base.get("pursuer_vmax", 0.0))
+        ve = float(base.get("evader_vmax", 0.0))
+        write_run_manifest(
+            output_path,
+            exp_cfg,
+            config_path=config_path,
+            extra={
+                "pursuer_vmax": vp,
+                "pursuer_amax": float(base.get("pursuer_amax", 0.0)),
+                "evader_vmax": ve,
+                "evader_amax": float(base.get("evader_amax", 0.0)),
+                "evader_policy": base.get("evader_policy"),
+                "speed_ratio": round(ve / vp, 4) if vp > 0 else None,
+            },
+        )
+
     return base
 
 

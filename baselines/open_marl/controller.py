@@ -1,8 +1,4 @@
-"""OPEN MARL baseline controller (inference from trained checkpoint).
-
-Reference: Chen et al., Online Planning for Multi-UAV Pursuit-Evasion
-in Unknown Environments (OPEN) — 2D point-mass adaptation.
-"""
+"""OPEN MARL baseline controller (inference from trained checkpoint)."""
 
 from __future__ import annotations
 
@@ -27,7 +23,7 @@ def _resolve_checkpoint(path: str) -> Path:
     if not p.exists():
         raise FileNotFoundError(
             f"OPEN MARL checkpoint not found: {p}\n"
-            "Train with: python experiments/train_open_marl.py --save checkpoints/open_marl/default.pt"
+            "Train with: python experiments/train_open_marl.py --stage 1 --device cuda"
         )
     return p
 
@@ -99,12 +95,14 @@ def make_open_marl_controller() -> Any:
             n = len(pursuers)
             dt = config["dt"]
 
+            obs_t = torch.tensor(obs.tolist(), dtype=torch.float32, device=device).unsqueeze(0)
+            hist_t = torch.tensor(history.tolist(), dtype=torch.float32, device=device).unsqueeze(0)
+            with torch.no_grad():
+                actions, _, _, _ = pol.actor_forward_batch(obs_t, hist_t, deterministic=deterministic)
+            actions_np = np.array(actions.cpu().tolist()[0], dtype=np.float32)
+
             for i in range(n):
-                obs_t = torch.tensor(obs[i : i + 1], device=device, dtype=torch.float32)
-                hist_t = torch.tensor(history, device=device, dtype=torch.float32).unsqueeze(0)
-                with torch.no_grad():
-                    action, _, _, _ = pol.actor_forward(obs_t, hist_t, deterministic=deterministic)
-                acc = action.cpu().numpy()[0]
+                acc = actions_np[i]
                 p_new, v_new = integrate_point_mass(
                     pursuers[i],
                     pursuer_v[i],

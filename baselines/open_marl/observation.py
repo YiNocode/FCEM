@@ -34,15 +34,28 @@ class OpenMarlConfig:
         )
 
     @property
+    def self_obs_dim(self) -> int:
+        # velocity(2) + relative evader(2); EPN prediction appended in the network
+        return 4
+
+    @property
+    def other_obs_dim(self) -> int:
+        return (self.n_pursuers - 1) * 2
+
+    @property
+    def obstacle_obs_dim(self) -> int:
+        return self.obs_max_obstacles * 2
+
+    @property
     def obs_dim(self) -> int:
-        # self_vel(2) + rel_evader(2) + others((n-1)*2) + obstacles(k*2)
-        n = self.n_pursuers
-        k = self.obs_max_obstacles
-        return 2 + 2 + (n - 1) * 2 + k * 2
+        return self.self_obs_dim + self.other_obs_dim + self.obstacle_obs_dim
+
+    @property
+    def self_encoder_dim(self) -> int:
+        return self.self_obs_dim + self.epn_target_dim
 
     @property
     def epn_input_dim(self) -> int:
-        # pursuer positions (n*2) + evader pos(2) + evader vel(2) + timestep(1)
         return self.n_pursuers * 2 + 2 + 2 + 1
 
     @property
@@ -60,7 +73,6 @@ def has_line_of_sight(
     obstacles: list[Obstacle],
     clearance: float = 0.05,
 ) -> bool:
-    """Return True if segment observer→target is not blocked by obstacles."""
     for obs in obstacles:
         d = point_segment_distance(obs.center, observer, target)
         if d < obs.radius + clearance:
@@ -89,12 +101,20 @@ def k_nearest_obstacle_offsets(
     out = np.zeros(k * 2, dtype=np.float32)
     if not obstacles:
         return out
-    dists = [(norm := float(np.linalg.norm(pos - o.center)), o) for o in obstacles]
+    dists = [(float(np.linalg.norm(pos - o.center)), o) for o in obstacles]
     dists.sort(key=lambda x: x[0])
     for i, (_, obs) in enumerate(dists[:k]):
         rel = _scale_vec(obs.center - pos, scale)
         out[2 * i : 2 * i + 2] = rel
     return out
+
+
+def split_observation(obs: np.ndarray, cfg: OpenMarlConfig) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Split flat obs into (o_self, o_other, o_ob) per agent."""
+    s = cfg.self_obs_dim
+    o = cfg.other_obs_dim
+    b = cfg.obstacle_obs_dim
+    return obs[..., :s], obs[..., s : s + o], obs[..., s + o : s + o + b]
 
 
 class ObservationBuilder:
@@ -147,7 +167,6 @@ class ObservationBuilder:
             self.history.pop(0)
 
     def history_tensor(self) -> np.ndarray:
-        """Shape (history_step, epn_input_dim), zero-padded at start."""
         h = self.cfg.history_step
         d = self.cfg.epn_input_dim
         out = np.zeros((h, d), dtype=np.float32)
@@ -157,19 +176,19 @@ class ObservationBuilder:
         out[-n:] = np.stack(self.history[-n:], axis=0)
         return out
 
-    def future_evader_targets(
+    def future_evader_targets_from_positions(
         self,
         pursuers: np.ndarray,
-        evader_future: np.ndarray,
+        future_evader_positions: list[np.ndarray],
     ) -> np.ndarray:
         """Relative evader positions for K future steps from pursuer centroid."""
         centroid = np.mean(pursuers, axis=0)
         k = self.cfg.future_prediction_step
         scale = self._arena_scale
         targets = np.zeros(k * 2, dtype=np.float32)
-        for t in range(min(k, len(evader_future))):
-            rel = _scale_vec(evader_future[t] - centroid, scale)
-            targets[2 * t : 2 * t + 2] = rel
+        for t, pos in enumerate(future_evader_positions[:k]):
+            rel = _scale_vec(pos - centroid, scale)
+            targets[2 * t : 2 * t + 2] = rel.astype(np.float32)
         return targets
 
     def build_observations(

@@ -24,7 +24,7 @@ from experiments.config_loader import (
     load_experiment_config,
     obstacles_from_scenario,
 )
-from experiments.runner_args import add_dynamics_args, dynamics_overrides_from_args
+from experiments.runner_args import add_dynamics_args, add_run_output_args, dynamics_overrides_from_args, run_output_kwargs_from_args
 from experiments.runner_common import trial_summary
 from metrics.experiment_logger import ExperimentLogger
 from metrics.pre_capture import pre_capture_k_from_config, pre_capture_structure_metrics
@@ -59,7 +59,7 @@ def run_trial(method: str, scenario_name: str, trial_id: int, base_config: dict)
     logger = ExperimentLogger(out_dir, method, scenario_name, trial_id, cfg)
     for frame in result["frames"]:
         logger.log_step(frame)
-    summary = trial_summary(result, cfg["dt"])
+    summary = trial_summary(result, cfg["dt"], cfg)
     summary["backend"] = "pyflyt"
     summary["method"] = method
     k_pre = pre_capture_k_from_config(cfg)
@@ -94,6 +94,7 @@ def main() -> None:
         help="experiment config for default methods/scenarios",
     )
     add_dynamics_args(parser)
+    add_run_output_args(parser)
     args = parser.parse_args()
 
     if not PyFlytEnv.check():
@@ -102,7 +103,11 @@ def main() -> None:
         sys.exit(0)
 
     exp_cfg = load_experiment_config(Path(args.config))
-    base = build_experiment_base_config(exp_cfg, dynamics_overrides_from_args(args))
+    base = build_experiment_base_config(
+        exp_cfg,
+        dynamics_overrides_from_args(args),
+        **run_output_kwargs_from_args(args),
+    )
     if args.max_steps is not None:
         base["max_steps"] = args.max_steps
     if args.render:

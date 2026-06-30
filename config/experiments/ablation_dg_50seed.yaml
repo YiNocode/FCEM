@@ -1,0 +1,58 @@
+_base: setup.yaml
+name: ablation_dg_50seed
+section: ablation_dg
+output_subdir: ablation/dg_50seed
+description: FCEM layer-removal ablation under differential-game evader.
+
+# Scope requested for the DG layer ablation. Do not add free/open-space here.
+n_trials: 50
+scenarios:
+  - random_obstacles
+  - single_exit
+
+capture_mode: escape_sector
+
+# Disable the inherited setup.yaml dynamics_file so the policy name in logs is
+# the explicit task name while keeping the same v_e / v_p = 2.0 dynamics.
+dynamics_file:
+dynamics:
+  pursuer_vmax: 4.0
+  pursuer_amax: 3.2
+  evader_vmax: 8.0
+  evader_amax: 3.2
+  evader_policy: differential_game
+
+variants:
+  - name: full_fcem
+    remove_layer:
+  - name: no_l1_prediction
+    remove_layer: L1
+  - name: no_l2_multi_candidate_manifold
+    remove_layer: L2
+  - name: no_l3_executability_assignment
+    remove_layer: L3
+  - name: no_l4_slot_velocity_feedforward
+    remove_layer: L4
+
+summary_metrics:
+  - success_rate
+  - adjusted_TTC_with_timeout
+  - conditional_TTC_success_only
+  - C_esc_at_capture
+  - G_esc_at_capture_deg
+  - C_esc_final5_mean
+  - G_esc_final5_mean_deg
+  - mean_slot_error
+  - final5_slot_error
+  - assignment_switch_count
+  - infeasible_slot_rate
+  - collision_rate
+  - boundary_violation_rate
+  - decision_time_p95
+  - decision_time_p99
+
+expected_interpretation:
+  - L2 should matter in random_obstacles.
+  - L3 should affect feasibility, assignment stability, and adjusted TTC.
+  - L4 should affect tracking lag and slot error.
+  - L1 should matter more under differential-game or single_exit scenarios.

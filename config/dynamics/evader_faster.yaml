@@ -1,5 +1,6 @@
-# Evader faster than pursuers (v_e / v_p = 2.5; used by run_all_experiments suite)
+# Main benchmark dynamics (v_e / v_p = 2.0; differential-game evader)
 pursuer_vmax: 4.0
 pursuer_amax: 3.2
-evader_vmax: 10.0
-evader_amax: 4.0
+evader_vmax: 8.0
+evader_amax: 3.2
+evader_policy: game

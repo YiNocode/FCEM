@@ -51,16 +51,23 @@ def update_radius(
     expansion_rate: float,
     enable_guarded_contraction: bool = True,
     fixed_shrink: bool = False,
+    can_contract: bool = True,
 ) -> float:
     if fixed_shrink:
-        return max(R_terminal, R - contraction_rate)
+        if can_contract:
+            return max(R_terminal, R - contraction_rate)
+        return R
 
     if not enable_guarded_contraction:
-        return max(R_terminal, R - contraction_rate * 0.5)
+        if can_contract:
+            return max(R_terminal, R - contraction_rate * 0.5)
+        return R
 
-    if q > 0.12:
+    if q > 0.12 and can_contract:
         return max(R_terminal, R - contraction_rate * q)
-    return min(R_init, R + expansion_rate)
+    if q <= 0.12:
+        return min(R_init, R + expansion_rate)
+    return R
 
 
 def phase_label(R: float, R_init: float, R_terminal: float, min_R_for_closure: float, captured: bool) -> str:

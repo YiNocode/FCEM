@@ -32,6 +32,17 @@ def _mean_std(values: list[float]) -> tuple[float | str, float | str]:
     return mean, math.sqrt(var)
 
 
+def _median(values: list[float]) -> float | str:
+    if not values:
+        return ""
+    ordered = sorted(values)
+    n = len(ordered)
+    mid = n // 2
+    if n % 2:
+        return ordered[mid]
+    return 0.5 * (ordered[mid - 1] + ordered[mid])
+
+
 def summarize_rows(rows: list[dict], group_keys: tuple[str, ...]) -> list[dict]:
     groups: dict[tuple, list[dict]] = defaultdict(list)
     for row in rows:
@@ -51,6 +62,11 @@ def summarize_rows(rows: list[dict], group_keys: tuple[str, ...]) -> list[dict]:
         ]
         ttc = [v for v in ttc if v is not None]
         mean_ttc, std_ttc = _mean_std(ttc)
+
+        ttc_adj = [_to_float(r.get("time_to_capture_adj_s")) for r in items]
+        ttc_adj = [v for v in ttc_adj if v is not None]
+        mean_ttc_adj, std_ttc_adj = _mean_std(ttc_adj)
+        median_ttc_adj = _median(ttc_adj)
 
         d_ang = [_to_float(r.get("mean_D_ang")) for r in items]
         d_ang = [v for v in d_ang if v is not None]
@@ -77,16 +93,53 @@ def summarize_rows(rows: list[dict], group_keys: tuple[str, ...]) -> list[dict]:
             vals = [v for v in vals if v is not None]
             return _mean_std(vals)
 
+        def _mean_std_col(key: str) -> tuple[float | str, float | str]:
+            vals = [_to_float(r.get(key)) for r in items]
+            vals = [v for v in vals if v is not None]
+            return _mean_std(vals)
+
+        pre_can_d, std_pre_can_d = _pre_cap_col("pre_capture_canonical_D_ang")
+        pre_can_c, std_pre_can_c = _pre_cap_col("pre_capture_canonical_C_cov")
+        pre_can_g, std_pre_can_g = _pre_cap_col("pre_capture_canonical_G_max_deg")
+        pre_can_sync, std_pre_can_sync = _pre_cap_col("pre_capture_canonical_C_sync")
+
         pre_d, std_pre_d = _pre_cap_col("pre_capture_D_ang")
         pre_c, std_pre_c = _pre_cap_col("pre_capture_C_cov")
         pre_g, std_pre_g = _pre_cap_col("pre_capture_G_max_deg")
         pre_sync, std_pre_sync = _pre_cap_col("pre_capture_C_sync")
+
+        pre_d_free, std_pre_d_free = _pre_cap_col("pre_capture_D_free")
+        pre_c_free, std_pre_c_free = _pre_cap_col("pre_capture_C_free")
+        pre_g_free, std_pre_g_free = _pre_cap_col("pre_capture_G_free_deg")
+
+        cap_d, std_cap_d = _pre_cap_col("capture_D_ang")
+        cap_c, std_cap_c = _pre_cap_col("capture_C_cov")
+        cap_g, std_cap_g = _pre_cap_col("capture_G_max_deg")
+
+        pre5_d, std_pre5_d = _pre_cap_col("pre_capture_5_D_ang")
+        pre5_c, std_pre5_c = _pre_cap_col("pre_capture_5_C_cov")
+        pre5_g, std_pre5_g = _pre_cap_col("pre_capture_5_G_max_deg")
+
+        pre10_d, std_pre10_d = _pre_cap_col("pre_capture_10_D_ang")
+        pre10_c, std_pre10_c = _pre_cap_col("pre_capture_10_C_cov")
+        pre10_g, std_pre10_g = _pre_cap_col("pre_capture_10_G_max_deg")
+
+        can_d, std_can_d = _mean_std_col("mean_canonical_D_ang")
+        can_c, std_can_c = _mean_std_col("mean_canonical_C_cov")
+        can_g, std_can_g = _mean_std_col("mean_canonical_G_max_deg")
+
+        open_d, std_open_d = _mean_std_col("mean_open_D_ang")
+        open_c, std_open_c = _mean_std_col("mean_open_C_cov")
+        open_g, std_open_g = _mean_std_col("mean_open_G_max_deg")
 
         row = {
             "n_trials": n,
             "success_rate": success_rate,
             "mean_time_to_capture_s": mean_ttc,
             "std_time_to_capture_s": std_ttc,
+            "mean_time_to_capture_adj_s": mean_ttc_adj,
+            "std_time_to_capture_adj_s": std_ttc_adj,
+            "median_time_to_capture_adj_s": median_ttc_adj,
             "mean_D_ang": mean_d,
             "std_D_ang": std_d,
             "mean_C_cov": mean_c,
@@ -95,6 +148,26 @@ def summarize_rows(rows: list[dict], group_keys: tuple[str, ...]) -> list[dict]:
             "std_G_max_deg": std_g,
             "mean_C_sync": mean_sync,
             "std_C_sync": std_sync,
+            "mean_canonical_D_ang": can_d,
+            "std_mean_canonical_D_ang": std_can_d,
+            "mean_canonical_C_cov": can_c,
+            "std_mean_canonical_C_cov": std_can_c,
+            "mean_canonical_G_max_deg": can_g,
+            "std_mean_canonical_G_max_deg": std_can_g,
+            "mean_open_D_ang": open_d,
+            "std_mean_open_D_ang": std_open_d,
+            "mean_open_C_cov": open_c,
+            "std_mean_open_C_cov": std_open_c,
+            "mean_open_G_max_deg": open_g,
+            "std_mean_open_G_max_deg": std_open_g,
+            "pre_capture_canonical_D_ang": pre_can_d,
+            "std_pre_capture_canonical_D_ang": std_pre_can_d,
+            "pre_capture_canonical_C_cov": pre_can_c,
+            "std_pre_capture_canonical_C_cov": std_pre_can_c,
+            "pre_capture_canonical_G_max_deg": pre_can_g,
+            "std_pre_capture_canonical_G_max_deg": std_pre_can_g,
+            "pre_capture_canonical_C_sync": pre_can_sync,
+            "std_pre_capture_canonical_C_sync": std_pre_can_sync,
             "pre_capture_D_ang": pre_d,
             "std_pre_capture_D_ang": std_pre_d,
             "pre_capture_C_cov": pre_c,
@@ -103,6 +176,30 @@ def summarize_rows(rows: list[dict], group_keys: tuple[str, ...]) -> list[dict]:
             "std_pre_capture_G_max_deg": std_pre_g,
             "pre_capture_C_sync": pre_sync,
             "std_pre_capture_C_sync": std_pre_sync,
+            "pre_capture_D_free": pre_d_free,
+            "std_pre_capture_D_free": std_pre_d_free,
+            "pre_capture_C_free": pre_c_free,
+            "std_pre_capture_C_free": std_pre_c_free,
+            "pre_capture_G_free_deg": pre_g_free,
+            "std_pre_capture_G_free_deg": std_pre_g_free,
+            "capture_D_ang": cap_d,
+            "std_capture_D_ang": std_cap_d,
+            "capture_C_cov": cap_c,
+            "std_capture_C_cov": std_cap_c,
+            "capture_G_max_deg": cap_g,
+            "std_capture_G_max_deg": std_cap_g,
+            "pre_capture_5_D_ang": pre5_d,
+            "std_pre_capture_5_D_ang": std_pre5_d,
+            "pre_capture_5_C_cov": pre5_c,
+            "std_pre_capture_5_C_cov": std_pre5_c,
+            "pre_capture_5_G_max_deg": pre5_g,
+            "std_pre_capture_5_G_max_deg": std_pre5_g,
+            "pre_capture_10_D_ang": pre10_d,
+            "std_pre_capture_10_D_ang": std_pre10_d,
+            "pre_capture_10_C_cov": pre10_c,
+            "std_pre_capture_10_C_cov": std_pre10_c,
+            "pre_capture_10_G_max_deg": pre10_g,
+            "std_pre_capture_10_G_max_deg": std_pre10_g,
         }
         for i, k in enumerate(group_keys):
             row[k] = key[i]
@@ -153,10 +250,20 @@ def summarize_csv(
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Summarize aggregated experiment CSV")
-    parser.add_argument("--csv", type=str, default="results/aggregated.csv")
-    parser.add_argument("--out-dir", type=str, default="results/summary")
+    parser.add_argument("--csv", type=str, default=None)
+    parser.add_argument("--out-dir", type=str, default=None)
+    parser.add_argument("--run-dir", type=str, default=None, help="Experiment run directory")
     args = parser.parse_args()
-    summarize_csv(Path(args.csv), Path(args.out_dir))
+
+    if args.run_dir:
+        run_dir = Path(args.run_dir)
+        csv_path = Path(args.csv) if args.csv else run_dir / "aggregated_comparison.csv"
+        out_dir = Path(args.out_dir) if args.out_dir else run_dir / "summary"
+    else:
+        csv_path = Path(args.csv or "results/aggregated_comparison.csv")
+        out_dir = Path(args.out_dir or "results/summary")
+
+    summarize_csv(csv_path, out_dir)
 
 
 if __name__ == "__main__":

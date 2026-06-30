@@ -1,17 +1,11 @@
 _base: setup.yaml
 name: comparison
 section: comparative_evaluation
-description: FCEM vs all baselines (point-mass adaptations, v_e/v_p=2.5)
+description: FCEM vs all baselines (point-mass adaptations, v_e/v_p=2.0, game evader)
 output_subdir: comparison
 
 methods:
   - fcem
   - pure_pursuit
-  - fixed_ring
-  - deghat_circumnavigation
-  - kou_xiang_fencing
-  - fang_relay_2022
-  - relay_pursuit
   - liao_mpc
-  - yu_consensus
-  - open_marl
+  - ac_baseline

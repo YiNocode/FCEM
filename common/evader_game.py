@@ -37,23 +37,26 @@ def minimax_evasion_direction(
     pursuer_vmax: float,
     horizon: float,
     n_directions: int = 48,
+    evader_vmax: float = 1.0,
 ) -> np.ndarray:
     """
     Discrete Isaacs-style evasion: maximize worst-case clearance after horizon.
 
-    Pursuers are predicted with pure pursuit at ``pursuer_vmax``.
+    Pursuers are predicted with pure pursuit at ``pursuer_vmax``; the evader
+    candidate moves at ``evader_vmax`` along each trial heading.
     """
     if pursuers is None or len(pursuers) == 0:
         return np.array([1.0, 0.0])
 
     pursuers = np.asarray(pursuers, dtype=float)
+    ev_speed = max(float(evader_vmax), 1e-6)
     best_score = -np.inf
     best_dir = np.array([1.0, 0.0])
     thetas = np.linspace(0.0, 2.0 * np.pi, n_directions, endpoint=False)
 
     for theta in thetas:
         u = np.array([np.cos(theta), np.sin(theta)], dtype=float)
-        ev_future = evader + horizon * u
+        ev_future = evader + ev_speed * horizon * u
         worst = np.inf
         for p in pursuers:
             chase = unit(evader - p)
@@ -76,6 +79,7 @@ def game_escape_direction(
     minimax_weight: float = 1.0,
     gap_gain: float = 1.15,
     velocity_inertia: float = 0.35,
+    evader_vmax: float = 1.0,
 ) -> np.ndarray:
     """Blend maximin heading, largest-gap breakout, and velocity persistence."""
     if pursuers is None or len(pursuers) == 0:
@@ -84,7 +88,12 @@ def game_escape_direction(
         return np.array([1.0, 0.0])
 
     u_minimax = minimax_evasion_direction(
-        evader, pursuers, pursuer_vmax, horizon, n_directions
+        evader,
+        pursuers,
+        pursuer_vmax,
+        horizon,
+        n_directions,
+        evader_vmax=evader_vmax,
     )
     u_gap = largest_angular_gap_direction(evader, pursuers)
     combo = minimax_weight * u_minimax + gap_gain * u_gap + velocity_inertia * evader_v
@@ -135,6 +144,7 @@ def evader_game_step(
         minimax_weight=minimax_weight,
         gap_gain=gap_gain,
         velocity_inertia=velocity_inertia,
+        evader_vmax=vmax,
     )
 
     from common.dynamics import wall_clearances
